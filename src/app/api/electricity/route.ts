@@ -87,6 +87,8 @@ async function fetchTransformers() {
   }
 }
 
+export const runtime = "edge";
+
 export async function GET() {
   try {
     const [outagesRes, scheduledRes, transformers] =

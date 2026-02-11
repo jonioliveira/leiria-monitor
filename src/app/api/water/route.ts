@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+export const runtime = "edge";
+
 const SMAS_WP_API =
   "https://smas-leiria.pt/wp-json/wp/v2/posts?categories=13,1&per_page=5&orderby=date&order=desc";
 

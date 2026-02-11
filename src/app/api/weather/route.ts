@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+export const runtime = "edge";
+
 // IPMA API endpoints
 const IPMA_WARNINGS = "https://api.ipma.pt/open-data/forecast/warnings/warnings_www.json";
 const IPMA_FORECAST = "https://api.ipma.pt/open-data/forecast/meteorology/cities/daily";
