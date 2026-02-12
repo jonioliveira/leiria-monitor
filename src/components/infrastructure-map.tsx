@@ -58,7 +58,7 @@ function Legend({ layer }: { layer: "electricity" | "telecom" | "both" }) {
     legend.onAdd = () => {
       const div = L.DomUtil.create("div", "");
       div.style.cssText =
-        "background: rgba(10,25,41,0.92); padding: 10px 14px; border-radius: 8px; border: 1px solid #334e68; font-size: 12px; color: #d9e2ec; line-height: 1.8;";
+        "background: rgba(255,255,255,0.92); padding: 10px 14px; border-radius: 8px; border: 1px solid #d1d5db; font-size: 12px; color: #1f2937; line-height: 1.8; box-shadow: 0 1px 4px rgba(0,0,0,0.1);";
 
       let html = "";
 
@@ -102,7 +102,7 @@ export function InfrastructureMap({ municipalities, layer }: InfrastructureMapPr
     >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+        url="https://{s}.basemaps.cartocdn.com/voyager/{z}/{x}/{y}{r}.png"
       />
       <Legend layer={layer} />
 
