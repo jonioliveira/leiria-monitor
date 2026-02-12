@@ -21,12 +21,12 @@ export async function GET() {
     const activation = {
       code: raw.code ?? "EMSR861",
       name: raw.name ?? null,
-      countries: raw.countries ?? [],
-      activationTime: raw.activation_time ?? null,
+      countries: (raw.countries ?? []).map((c: any) => c.short_name ?? c.name ?? c),
+      activationTime: raw.activationTime ?? raw.activation_time ?? null,
       closed: raw.closed ?? null,
       n_aois: raw.n_aois ?? 0,
       n_products: raw.n_products ?? 0,
-      drmPhase: raw.drm_phase ?? null,
+      drmPhase: raw.drmPhase ?? raw.drm_phase ?? null,
       centroid: raw.centroid ?? null,
     };
 
