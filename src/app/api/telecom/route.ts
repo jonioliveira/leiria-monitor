@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 
-export const runtime = "edge";
-
 // Operator portal health checks
 const OPERATOR_ENDPOINTS = [
   { name: "MEO", url: "https://www.meo.pt", color: "#00a3e0" },
