@@ -13,6 +13,8 @@ import { desc, sql } from "drizzle-orm";
 export const revalidate = 60;
 
 export async function GET() {
+  const eredesEnabled = process.env.FEATURE_EREDES_ENABLED === "true";
+
   try {
     const [snapshot, outages, warnings, occurrences, scheduledWork, populationWarnings] =
       await Promise.all([
@@ -21,10 +23,10 @@ export async function GET() {
           .from(recoverySnapshots)
           .orderBy(desc(recoverySnapshots.date))
           .limit(1),
-        db.select().from(eredesOutages),
+        eredesEnabled ? db.select().from(eredesOutages) : Promise.resolve([]),
         db.select().from(ipmaWarnings),
         db.select().from(procivOccurrences),
-        db.select().from(eredesScheduledWork),
+        eredesEnabled ? db.select().from(eredesScheduledWork) : Promise.resolve([]),
         db.select().from(procivWarnings),
       ]);
 
@@ -33,7 +35,9 @@ export async function GET() {
 
     // Derive status levels
     let electricityStatus: "critical" | "warning" | "ok" | "unknown" = "unknown";
-    if (outages.length > 0) {
+    if (!eredesEnabled) {
+      electricityStatus = "unknown";
+    } else if (outages.length > 0) {
       electricityStatus = totalOutages > 5 ? "critical" : totalOutages > 0 ? "warning" : "ok";
     }
 

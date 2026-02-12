@@ -5,6 +5,19 @@ import { eredesOutages, eredesScheduledWork } from "@/db/schema";
 export const revalidate = 60;
 
 export async function GET() {
+  if (process.env.FEATURE_EREDES_ENABLED !== "true") {
+    return NextResponse.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      disabled: true,
+      message: "E-REDES data is temporarily disabled",
+      leiria: {
+        active_outages: { total_outage_count: 0, municipalities_affected: 0, records: [], extraction_datetime: null },
+        scheduled_interruptions: { total_records: 0, records: [] },
+      },
+    });
+  }
+
   try {
     const [outages, scheduledWork] = await Promise.all([
       db.select().from(eredesOutages),

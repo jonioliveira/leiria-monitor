@@ -14,6 +14,10 @@ export async function GET(request: NextRequest) {
   const authError = verifyCronSecret(request);
   if (authError) return authError;
 
+  if (process.env.FEATURE_EREDES_ENABLED !== "true") {
+    return NextResponse.json({ success: true, skipped: true, message: "E-REDES data is temporarily disabled" });
+  }
+
   try {
     const municipalityFilter = LEIRIA_MUNICIPALITIES.map(
       (m) => `municipality = '${m}'`

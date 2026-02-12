@@ -98,8 +98,10 @@ export async function GET(request: NextRequest) {
     results.ipma = { success: false, error: error.message };
   }
 
-  // 2) E-REDES — outages + scheduled work
-  try {
+  // 2) E-REDES — outages + scheduled work (feature-flagged)
+  if (process.env.FEATURE_EREDES_ENABLED !== "true") {
+    results.eredes = { success: true, detail: { skipped: true } };
+  } else try {
     const municipalityFilter = LEIRIA_MUNICIPALITIES.map((m) => `municipality = '${m}'`).join(" OR ");
     const [outagesRes, scheduledRes] = await Promise.allSettled([
       fetch(
