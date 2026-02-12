@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { Zap, CloudRain, AlertTriangle, Home, Menu, X, Map, MessageSquarePlus } from "lucide-react";
+import { Zap, CloudRain, AlertTriangle, Home, Menu, X, Map, MessageSquarePlus, Wind, Satellite } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/", label: "Início", icon: Home },
@@ -13,6 +13,8 @@ const NAV_ITEMS = [
   { href: "/eletricidade", label: "Eletricidade", icon: Zap },
   { href: "/meteorologia", label: "Meteorologia", icon: CloudRain },
   { href: "/ocorrencias", label: "Ocorrências", icon: AlertTriangle },
+  { href: "/qualidade-ar", label: "Ar", icon: Wind },
+  { href: "/copernicus", label: "Copernicus", icon: Satellite },
 ] as const;
 
 export function Nav() {
