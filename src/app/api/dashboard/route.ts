@@ -53,35 +53,11 @@ export async function GET() {
       occurrencesStatus = "critical";
     }
 
-    // Fetch external Copernicus & air quality data in parallel
-    const [airQualityResult, copernicusResult] = await Promise.allSettled([
-      fetch(
-        "https://air-quality-api.open-meteo.com/v1/air-quality" +
-          "?latitude=39.7437&longitude=-8.8071" +
-          "&current=european_aqi,pm2_5" +
-          "&timezone=Europe/Lisbon",
-        { signal: AbortSignal.timeout(8000) }
-      ).then((r) => r.json()),
-      fetch(
-        "https://mapping.emergency.copernicus.eu/activations/api/activations/EMSR861/",
-        { signal: AbortSignal.timeout(10000) }
-      ).then((r) => r.json()),
-    ]);
-
-    let airQuality: { status: string; aqi: number | null; pm25: number | null } = {
-      status: "unknown",
-      aqi: null,
-      pm25: null,
-    };
-    if (airQualityResult.status === "fulfilled") {
-      const aqi = airQualityResult.value?.current?.european_aqi ?? null;
-      const pm25 = airQualityResult.value?.current?.pm2_5 ?? null;
-      airQuality = {
-        status: aqi === null ? "unknown" : aqi <= 20 ? "ok" : aqi <= 50 ? "warning" : "critical",
-        aqi,
-        pm25,
-      };
-    }
+    // Fetch Copernicus EMS data
+    const copernicusResult = await fetch(
+      "https://mapping.emergency.copernicus.eu/activations/api/activations/EMSR861/",
+      { signal: AbortSignal.timeout(10000) }
+    ).then((r) => r.json()).catch(() => null);
 
     let copernicus: { status: string; products: number; aois: number; active: boolean } = {
       status: "unknown",
@@ -89,8 +65,8 @@ export async function GET() {
       aois: 0,
       active: false,
     };
-    if (copernicusResult.status === "fulfilled") {
-      const raw = copernicusResult.value;
+    if (copernicusResult) {
+      const raw = copernicusResult;
       const isActive = !raw.closed;
       copernicus = {
         status: raw.code ? (isActive ? "warning" : "ok") : "unknown",
@@ -129,7 +105,6 @@ export async function GET() {
         scheduledWork: {
           count: scheduledWork.length,
         },
-        airQuality,
         copernicus,
       },
       recentWarnings: warnings

@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RecoveryScore } from "@/components/recovery-score";
 import { WarningBadge } from "@/components/warning-badge";
-import { Zap, CloudRain, AlertTriangle, ArrowRight, RefreshCw, Wrench, ShieldAlert, ExternalLink, Wind, Satellite } from "lucide-react";
+import { Zap, CloudRain, AlertTriangle, ArrowRight, RefreshCw, Wrench, ShieldAlert, ExternalLink, Satellite } from "lucide-react";
 
 interface DashboardData {
   success: boolean;
@@ -33,11 +33,6 @@ interface DashboardData {
     };
     scheduledWork: {
       count: number;
-    };
-    airQuality: {
-      status: string;
-      aqi: number | null;
-      pm25: number | null;
     };
     copernicus: {
       status: string;
@@ -291,45 +286,6 @@ export default function HomePage() {
                     <span className="text-sm text-muted-foreground">
                       {data?.summary.scheduledWork.count} obras
                     </span>
-                  </div>
-                )}
-              </div>
-              <div className="mt-3 flex items-center justify-end text-xs text-primary">
-                Ver detalhes <ArrowRight className="ml-1 h-3 w-3" />
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-
-        {/* Air Quality */}
-        <Link href="/qualidade-ar">
-          <Card className="cursor-pointer transition-colors hover:bg-accent/50">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="flex items-center gap-2 text-sm font-medium">
-                <Wind className="h-4 w-4 text-green-400" />
-                Qualidade do Ar
-              </CardTitle>
-              <Badge
-                variant="outline"
-                className={STATUS_COLORS[data?.summary.airQuality?.status ?? "unknown"]}
-              >
-                {STATUS_LABELS[data?.summary.airQuality?.status ?? "unknown"]}
-              </Badge>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-baseline justify-between">
-                <div>
-                  <p className="text-2xl font-bold">
-                    {data?.summary.airQuality?.aqi ?? "—"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Índice Europeu</p>
-                </div>
-                {data?.summary.airQuality?.pm25 != null && (
-                  <div className="text-right">
-                    <p className="text-lg font-semibold text-muted-foreground">
-                      {data.summary.airQuality.pm25}
-                    </p>
-                    <p className="text-xs text-muted-foreground">PM2.5 µg/m³</p>
                   </div>
                 )}
               </div>
