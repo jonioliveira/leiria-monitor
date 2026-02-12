@@ -18,9 +18,22 @@ interface MunicipalityData {
   } | null;
 }
 
+interface Report {
+  id: number;
+  type: "electricity" | "telecom";
+  operator: string | null;
+  description: string | null;
+  street: string | null;
+  lat: number;
+  lng: number;
+  upvotes: number;
+  createdAt: string;
+}
+
 interface InfrastructureMapProps {
   municipalities: MunicipalityData[];
   layer: "electricity" | "telecom" | "both";
+  reports?: Report[];
 }
 
 const LEIRIA_CENTER: [number, number] = [39.65, -8.75];
@@ -40,6 +53,19 @@ function getElectricityRadius(outages: number): number {
   return 24;
 }
 
+function getReportColor(type: string): string {
+  return type === "electricity" ? "#f59e0b" : "#8b5cf6";
+}
+
+function timeAgo(dateStr: string): string {
+  const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
+  if (mins < 1) return "agora";
+  if (mins < 60) return `há ${mins}min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `há ${hours}h`;
+  return `há ${Math.floor(hours / 24)}d`;
+}
+
 function getTelecomColor(movelPct: number | null): string {
   if (movelPct == null) return "#64748b"; // slate (no data)
   if (movelPct >= 95) return "#10b981";
@@ -49,7 +75,7 @@ function getTelecomColor(movelPct: number | null): string {
 }
 
 // Component to add legend to the map
-function Legend({ layer }: { layer: "electricity" | "telecom" | "both" }) {
+function Legend({ layer, hasReports }: { layer: "electricity" | "telecom" | "both"; hasReports: boolean }) {
   const map = useMap();
 
   useEffect(() => {
@@ -81,18 +107,25 @@ function Legend({ layer }: { layer: "electricity" | "telecom" | "both" }) {
         html += `<span style="color:#64748b">&#9632;</span> Sem dados<br/>`;
       }
 
+      if (hasReports) {
+        if (html) html += "<br/>";
+        html += "<strong style='color:#8b5cf6'>Reportes</strong><br/>";
+        html += `<span style="color:#f59e0b">&#9650;</span> Sem luz<br/>`;
+        html += `<span style="color:#8b5cf6">&#9650;</span> Sem rede<br/>`;
+      }
+
       div.innerHTML = html;
       return div;
     };
 
     legend.addTo(map);
     return () => { legend.remove(); };
-  }, [map, layer]);
+  }, [map, layer, hasReports]);
 
   return null;
 }
 
-export function InfrastructureMap({ municipalities, layer }: InfrastructureMapProps) {
+export function InfrastructureMap({ municipalities, layer, reports = [] }: InfrastructureMapProps) {
   return (
     <MapContainer
       center={LEIRIA_CENTER}
@@ -104,7 +137,7 @@ export function InfrastructureMap({ municipalities, layer }: InfrastructureMapPr
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
       />
-      <Legend layer={layer} />
+      <Legend layer={layer} hasReports={reports.length > 0} />
 
       {municipalities.map((m) => {
         const showElectricity = layer === "electricity" || layer === "both";
@@ -217,6 +250,37 @@ export function InfrastructureMap({ municipalities, layer }: InfrastructureMapPr
               </CircleMarker>
             )}
           </span>
+        );
+      })}
+
+      {/* Community reports */}
+      {reports.map((r) => {
+        const color = getReportColor(r.type);
+        return (
+          <CircleMarker
+            key={`report-${r.id}`}
+            center={[r.lat, r.lng]}
+            radius={7}
+            pathOptions={{
+              color,
+              fillColor: color,
+              fillOpacity: 0.7,
+              weight: 2,
+            }}
+          >
+            <Popup>
+              <div style={{ fontFamily: "sans-serif", fontSize: "13px", lineHeight: "1.6", minWidth: 160 }}>
+                <p style={{ fontWeight: 700, fontSize: "14px", margin: "0 0 4px", color }}>
+                  {r.type === "electricity" ? "Sem luz" : `Sem rede${r.operator ? ` ${r.operator}` : ""}`}
+                </p>
+                {r.street && <p style={{ margin: "0 0 2px", fontSize: "12px" }}>{r.street}</p>}
+                {r.description && <p style={{ margin: "0 0 4px", fontSize: "12px", color: "#64748b" }}>{r.description}</p>}
+                <p style={{ margin: 0, fontSize: "11px", color: "#94a3b8" }}>
+                  {timeAgo(r.createdAt)} · {r.upvotes} confirmações
+                </p>
+              </div>
+            </Popup>
+          </CircleMarker>
         );
       })}
     </MapContainer>

@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MapPin, Zap, Wifi } from "lucide-react";
+import { MapPin, Zap, Wifi, MessageSquarePlus } from "lucide-react";
 import { MUNICIPALITY_COORDS } from "@/lib/constants";
 
 const InfrastructureMap = dynamic(
@@ -34,8 +34,21 @@ interface MunicipalityData {
   } | null;
 }
 
+interface Report {
+  id: number;
+  type: "electricity" | "telecom";
+  operator: string | null;
+  description: string | null;
+  street: string | null;
+  lat: number;
+  lng: number;
+  upvotes: number;
+  createdAt: string;
+}
+
 export default function MapaPage() {
   const [municipalities, setMunicipalities] = useState<MunicipalityData[]>([]);
+  const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [layer, setLayer] = useState<Layer>("both");
   const [meoUpdated, setMeoUpdated] = useState<string | null>(null);
@@ -43,9 +56,10 @@ export default function MapaPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [elecRes, telecomRes] = await Promise.allSettled([
+        const [elecRes, telecomRes, reportsRes] = await Promise.allSettled([
           fetch("/api/electricity"),
           fetch("/api/telecom"),
+          fetch("/api/reports"),
         ]);
 
         // Build outage map from electricity API
@@ -104,6 +118,12 @@ export default function MapaPage() {
         }
 
         setMunicipalities(result);
+
+        // Load community reports
+        if (reportsRes.status === "fulfilled" && reportsRes.value.ok) {
+          const reportsData = await reportsRes.value.json();
+          setReports(reportsData.reports ?? []);
+        }
       } catch {
         // silent fail
       } finally {
@@ -198,11 +218,11 @@ export default function MapaPage() {
         <Card>
           <CardContent className="pt-4 pb-3">
             <div className="flex items-center gap-2">
-              <MapPin className="h-4 w-4 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">Concelhos</span>
+              <MessageSquarePlus className="h-4 w-4 text-purple-400" />
+              <span className="text-xs text-muted-foreground">Reportes</span>
             </div>
-            <p className="mt-1 text-2xl font-bold">{municipalities.length}</p>
-            <p className="text-xs text-muted-foreground">monitorizados</p>
+            <p className="mt-1 text-2xl font-bold">{reports.length}</p>
+            <p className="text-xs text-muted-foreground">da comunidade</p>
           </CardContent>
         </Card>
       </div>
@@ -235,7 +255,7 @@ export default function MapaPage() {
       {/* Map */}
       <Card>
         <CardContent className="p-0 overflow-hidden rounded-lg">
-          <InfrastructureMap municipalities={municipalities} layer={layer} />
+          <InfrastructureMap municipalities={municipalities} layer={layer} reports={reports} />
         </CardContent>
       </Card>
 
