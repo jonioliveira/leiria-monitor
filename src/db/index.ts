@@ -3,8 +3,13 @@ import * as schema from "./schema";
 
 type DbClient = ReturnType<typeof drizzleNodePg<typeof schema>>;
 
+let _db: DbClient | null = null;
+
 function createDb(): DbClient {
-  const url = process.env.DATABASE_URL!;
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    throw new Error("DATABASE_URL is not set");
+  }
 
   // Use Neon serverless for production (wss:// or neon.tech URLs)
   // Use standard pg for local development
@@ -20,4 +25,9 @@ function createDb(): DbClient {
   return drizzle(pool, { schema }) as DbClient;
 }
 
-export const db = createDb();
+export const db = new Proxy({} as DbClient, {
+  get(_target, prop) {
+    if (!_db) _db = createDb();
+    return (_db as any)[prop];
+  },
+});
