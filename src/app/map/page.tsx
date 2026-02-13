@@ -5,8 +5,8 @@ import dynamic from "next/dynamic";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MapPin, Zap, Wifi, MessageSquarePlus } from "lucide-react";
-import { MUNICIPALITY_COORDS } from "@/lib/constants";
+import { MapPin, Zap, Wifi, MessageSquarePlus, Activity } from "lucide-react";
+import { MUNICIPALITY_COORDS, SUBSTATION_COORDS } from "@/lib/constants";
 
 const InfrastructureMap = dynamic(
   () =>
@@ -46,9 +46,27 @@ interface Report {
   createdAt: string;
 }
 
+interface SubstationMarker {
+  name: string;
+  lat: number;
+  lng: number;
+  latestLoad: number | null;
+}
+
+interface TransformerMarker {
+  lat: number;
+  lng: number;
+  kva: number;
+  usage: string;
+  clients: number;
+  municipality: string;
+}
+
 export default function MapaPage() {
   const [municipalities, setMunicipalities] = useState<MunicipalityData[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
+  const [substations, setSubstations] = useState<SubstationMarker[]>([]);
+  const [transformers, setTransformers] = useState<TransformerMarker[]>([]);
   const [loading, setLoading] = useState(true);
   const [layer, setLayer] = useState<Layer>("both");
   const [meoUpdated, setMeoUpdated] = useState<string | null>(null);
@@ -56,10 +74,12 @@ export default function MapaPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [elecRes, telecomRes, reportsRes] = await Promise.allSettled([
+        const [elecRes, telecomRes, reportsRes, subRes, ptdRes] = await Promise.allSettled([
           fetch("/api/electricity"),
           fetch("/api/telecom"),
           fetch("/api/reports"),
+          fetch("/api/electricity/substations"),
+          fetch("/api/electricity/transformers"),
         ]);
 
         // Build outage map from electricity API
@@ -124,6 +144,30 @@ export default function MapaPage() {
           const reportsData = await reportsRes.value.json();
           setReports(reportsData.reports ?? []);
         }
+
+        // Load substation markers
+        if (subRes.status === "fulfilled" && subRes.value.ok) {
+          const subData = await subRes.value.json();
+          const subs: SubstationMarker[] = [];
+          for (const s of subData.substations ?? []) {
+            const coords = SUBSTATION_COORDS[s.name];
+            if (coords) {
+              subs.push({
+                name: s.name,
+                lat: coords.lat,
+                lng: coords.lng,
+                latestLoad: s.latestLoad,
+              });
+            }
+          }
+          setSubstations(subs);
+        }
+
+        // Load transformer stations (PTD)
+        if (ptdRes.status === "fulfilled" && ptdRes.value.ok) {
+          const ptdData = await ptdRes.value.json();
+          setTransformers(ptdData.transformers ?? []);
+        }
       } catch {
         // silent fail
       } finally {
@@ -178,7 +222,7 @@ export default function MapaPage() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <Card>
           <CardContent className="pt-4 pb-3">
             <div className="flex items-center gap-2">
@@ -225,6 +269,16 @@ export default function MapaPage() {
             <p className="text-xs text-muted-foreground">da comunidade</p>
           </CardContent>
         </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3">
+            <div className="flex items-center gap-2">
+              <Activity className="h-4 w-4 text-cyan-400" />
+              <span className="text-xs text-muted-foreground">Transf. (PTD)</span>
+            </div>
+            <p className="mt-1 text-2xl font-bold">{transformers.length > 0 ? transformers.length.toLocaleString() : "—"}</p>
+            <p className="text-xs text-muted-foreground">{substations.length} subestações</p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Layer toggle */}
@@ -255,7 +309,7 @@ export default function MapaPage() {
       {/* Map */}
       <Card>
         <CardContent className="p-0 overflow-hidden rounded-lg">
-          <InfrastructureMap municipalities={municipalities} layer={layer} reports={reports} />
+          <InfrastructureMap municipalities={municipalities} layer={layer} reports={reports} substations={substations} transformers={transformers} />
         </CardContent>
       </Card>
 

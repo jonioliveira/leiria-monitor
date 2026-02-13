@@ -8,11 +8,11 @@ import { Zap, CloudRain, AlertTriangle, Home, Menu, X, Map, MessageSquarePlus, S
 
 const NAV_ITEMS = [
   { href: "/", label: "Início", icon: Home },
-  { href: "/mapa", label: "Mapa", icon: Map },
-  { href: "/reportar", label: "Reportar", icon: MessageSquarePlus },
-  { href: "/eletricidade", label: "Eletricidade", icon: Zap },
-  { href: "/meteorologia", label: "Meteorologia", icon: CloudRain },
-  { href: "/ocorrencias", label: "Ocorrências", icon: AlertTriangle },
+  { href: "/map", label: "Mapa", icon: Map },
+  { href: "/report", label: "Reportar", icon: MessageSquarePlus },
+  { href: "/electricity", label: "Eletricidade", icon: Zap },
+  { href: "/weather", label: "Meteorologia", icon: CloudRain },
+  { href: "/occurrences", label: "Ocorrências", icon: AlertTriangle },
 
   { href: "/copernicus", label: "Copernicus", icon: Satellite },
 ] as const;

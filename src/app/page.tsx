@@ -5,18 +5,12 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { RecoveryScore } from "@/components/recovery-score";
 import { WarningBadge } from "@/components/warning-badge";
 import { Zap, CloudRain, AlertTriangle, ArrowRight, RefreshCw, Wrench, ShieldAlert, ExternalLink, Satellite } from "lucide-react";
 
 interface DashboardData {
   success: boolean;
   timestamp: string;
-  recovery: {
-    score: number;
-    date: string;
-    breakdown: Record<string, number>;
-  } | null;
   summary: {
     electricity: {
       status: string;
@@ -176,9 +170,8 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Recovery Score Hero */}
+      {/* Dashboard header */}
       <div className="flex flex-col items-center py-4">
-        <RecoveryScore score={data?.recovery?.score ?? null} />
         {data?.timestamp && (
           <p className="mt-3 text-xs text-muted-foreground">
             Última atualização:{" "}
@@ -190,7 +183,7 @@ export default function HomePage() {
       {/* Summary Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {/* Electricity */}
-        <Link href="/eletricidade">
+        <Link href="/electricity">
           <Card className="cursor-pointer transition-colors hover:bg-accent/50">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="flex items-center gap-2 text-sm font-medium">
@@ -227,7 +220,7 @@ export default function HomePage() {
         </Link>
 
         {/* Weather */}
-        <Link href="/meteorologia">
+        <Link href="/weather">
           <Card className="cursor-pointer transition-colors hover:bg-accent/50">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="flex items-center gap-2 text-sm font-medium">
@@ -256,7 +249,7 @@ export default function HomePage() {
         </Link>
 
         {/* Occurrences */}
-        <Link href="/ocorrencias">
+        <Link href="/occurrences">
           <Card className="cursor-pointer transition-colors hover:bg-accent/50">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="flex items-center gap-2 text-sm font-medium">

@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { OutageChart } from "@/components/outage-chart";
+import { SubstationLoadChart } from "@/components/substation-load-chart";
 import { Zap } from "lucide-react";
 
 interface ElectricityData {
@@ -40,16 +41,29 @@ interface ElectricityData {
   };
 }
 
+interface SubstationData {
+  success: boolean;
+  timestamp: string;
+  substations: { name: string; latestLoad: number | null }[];
+  baseline: number;
+  actual: { time: string; totalLoad: number }[];
+  projection: { time: string; projectedLoad: number }[];
+}
+
 export default function EletricidadePage() {
   const [data, setData] = useState<ElectricityData | null>(null);
+  const [substationData, setSubstationData] = useState<SubstationData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/electricity")
-      .then((r) => r.json())
-      .then(setData)
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    Promise.allSettled([
+      fetch("/api/electricity").then((r) => r.json()),
+      fetch("/api/electricity/substations").then((r) => r.json()),
+    ]).then(([elecResult, subResult]) => {
+      if (elecResult.status === "fulfilled") setData(elecResult.value);
+      if (subResult.status === "fulfilled") setSubstationData(subResult.value);
+      setLoading(false);
+    });
   }, []);
 
   if (loading) {
@@ -135,6 +149,65 @@ export default function EletricidadePage() {
         </CardContent>
       </Card>
 
+      {/* Substation Recovery Chart */}
+      {substationData?.actual && substationData.actual.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">
+              Recuperação Energética — Subestações
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <SubstationLoadChart
+              actual={substationData.actual}
+              projection={substationData.projection}
+              baseline={substationData.baseline}
+            />
+            <p className="mt-2 text-xs text-muted-foreground">
+              Carga total agregada de {substationData.substations.length} subestações no distrito de Leiria.
+              Baseline calculado a partir da semana anterior à tempestade (20–25 Jan).
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Substation Table */}
+      {substationData?.substations && substationData.substations.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Subestações</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Subestação</TableHead>
+                  <TableHead className="text-right">Última Carga (MW)</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {[...substationData.substations]
+                  .sort((a, b) => (b.latestLoad ?? 0) - (a.latestLoad ?? 0))
+                  .map((s) => (
+                    <TableRow key={s.name}>
+                      <TableCell className="font-medium">{s.name}</TableCell>
+                      <TableCell className="text-right">
+                        {s.latestLoad != null ? (
+                          <span className={s.latestLoad > 0 ? "text-emerald-400" : "text-yellow-400"}>
+                            {s.latestLoad.toFixed(2)}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Scheduled Work Table */}
       {(scheduled?.records.length ?? 0) > 0 && (
         <Card>
@@ -181,6 +254,9 @@ export default function EletricidadePage() {
         Fonte: E-REDES Open Data Portal
         {outages?.extraction_datetime && (
           <> · Extração: {outages.extraction_datetime}</>
+        )}
+        {substationData?.success && (
+          <> · E-REDES — Diagrama de Carga de Subestações</>
         )}
       </p>
     </div>
