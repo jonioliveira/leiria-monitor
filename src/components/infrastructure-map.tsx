@@ -1,6 +1,7 @@
 "use client";
 
-import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, CircleMarker, Marker, Popup, useMap } from "react-leaflet";
+import MarkerClusterGroup from "react-leaflet-cluster";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useEffect } from "react";
@@ -30,10 +31,28 @@ interface Report {
   createdAt: string;
 }
 
+interface SubstationMarker {
+  name: string;
+  lat: number;
+  lng: number;
+  latestLoad: number | null;
+}
+
+interface TransformerMarker {
+  lat: number;
+  lng: number;
+  kva: number;
+  usage: string;
+  clients: number;
+  municipality: string;
+}
+
 interface InfrastructureMapProps {
   municipalities: MunicipalityData[];
   layer: "electricity" | "telecom" | "both";
   reports?: Report[];
+  substations?: SubstationMarker[];
+  transformers?: TransformerMarker[];
 }
 
 const LEIRIA_CENTER: [number, number] = [39.65, -8.75];
@@ -75,7 +94,7 @@ function getTelecomColor(movelPct: number | null): string {
 }
 
 // Component to add legend to the map
-function Legend({ layer, hasReports }: { layer: "electricity" | "telecom" | "both"; hasReports: boolean }) {
+function Legend({ layer, hasReports, hasSubstations, hasTransformers }: { layer: "electricity" | "telecom" | "both"; hasReports: boolean; hasSubstations: boolean; hasTransformers: boolean }) {
   const map = useMap();
 
   useEffect(() => {
@@ -107,6 +126,23 @@ function Legend({ layer, hasReports }: { layer: "electricity" | "telecom" | "bot
         html += `<span style="color:#64748b">&#9632;</span> Sem dados<br/>`;
       }
 
+      if (hasTransformers) {
+        if (html) html += "<br/>";
+        html += "<strong style='color:#06b6d4'>Postos Transformação</strong><br/>";
+        html += `<span style="color:#10b981">&#9679;</span> Util. &ge;60%<br/>`;
+        html += `<span style="color:#f59e0b">&#9679;</span> Util. 40–59%<br/>`;
+        html += `<span style="color:#64748b">&#9679;</span> Util. &lt;40%<br/>`;
+      }
+
+      if (hasSubstations) {
+        if (html) html += "<br/>";
+        html += "<strong style='color:#10b981'>Subestações</strong><br/>";
+        html += `<span style="color:#10b981">&#9670;</span> Carga &gt;5 MW<br/>`;
+        html += `<span style="color:#f59e0b">&#9670;</span> Carga baixa<br/>`;
+        html += `<span style="color:#ef4444">&#9670;</span> Sem carga<br/>`;
+        html += `<span style="color:#64748b">&#9670;</span> Sem dados<br/>`;
+      }
+
       if (hasReports) {
         if (html) html += "<br/>";
         html += "<strong style='color:#8b5cf6'>Reportes</strong><br/>";
@@ -120,12 +156,35 @@ function Legend({ layer, hasReports }: { layer: "electricity" | "telecom" | "bot
 
     legend.addTo(map);
     return () => { legend.remove(); };
-  }, [map, layer, hasReports]);
+  }, [map, layer, hasReports, hasSubstations, hasTransformers]);
 
   return null;
 }
 
-export function InfrastructureMap({ municipalities, layer, reports = [] }: InfrastructureMapProps) {
+function getPtdColor(usage: string): string {
+  if (usage.includes("60") || usage.includes("80") || usage.includes("100")) return "#10b981";
+  if (usage.includes("40")) return "#f59e0b";
+  return "#64748b";
+}
+
+function createPtdIcon(usage: string): L.DivIcon {
+  const color = getPtdColor(usage);
+  return L.divIcon({
+    html: `<div style="width:10px;height:10px;border-radius:50%;background:${color};border:1.5px solid white;box-shadow:0 0 3px rgba(0,0,0,0.3)"></div>`,
+    className: "",
+    iconSize: [10, 10],
+    iconAnchor: [5, 5],
+  });
+}
+
+function getSubstationColor(load: number | null): string {
+  if (load == null) return "#64748b"; // slate (no data)
+  if (load > 5) return "#10b981"; // green — healthy load
+  if (load > 0) return "#f59e0b"; // amber — low load
+  return "#ef4444"; // red — no load
+}
+
+export function InfrastructureMap({ municipalities, layer, reports = [], substations = [], transformers = [] }: InfrastructureMapProps) {
   return (
     <MapContainer
       center={LEIRIA_CENTER}
@@ -137,7 +196,7 @@ export function InfrastructureMap({ municipalities, layer, reports = [] }: Infra
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
       />
-      <Legend layer={layer} hasReports={reports.length > 0} />
+      <Legend layer={layer} hasReports={reports.length > 0} hasSubstations={substations.length > 0} hasTransformers={transformers.length > 0} />
 
       {municipalities.map((m) => {
         const showElectricity = layer === "electricity" || layer === "both";
@@ -250,6 +309,93 @@ export function InfrastructureMap({ municipalities, layer, reports = [] }: Infra
               </CircleMarker>
             )}
           </span>
+        );
+      })}
+
+      {/* Transformer stations (PTD) — clustered */}
+      {transformers.length > 0 && (
+        <MarkerClusterGroup
+          chunkedLoading
+          maxClusterRadius={50}
+          spiderfyOnMaxZoom
+          showCoverageOnHover={false}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          iconCreateFunction={(cluster: any) => {
+            const count = cluster.getChildCount();
+            let size = "small";
+            let dim = 30;
+            if (count > 100) { size = "large"; dim = 44; }
+            else if (count > 30) { size = "medium"; dim = 36; }
+            return L.divIcon({
+              html: `<div style="background:rgba(6,182,212,0.75);color:white;border-radius:50%;width:${dim}px;height:${dim}px;display:flex;align-items:center;justify-content:center;font-size:${size === "large" ? 13 : 11}px;font-weight:600;border:2px solid rgba(255,255,255,0.8);box-shadow:0 2px 6px rgba(0,0,0,0.3)">${count}</div>`,
+              className: "",
+              iconSize: L.point(dim, dim),
+            });
+          }}
+        >
+          {transformers.map((t, i) => (
+            <Marker
+              key={`ptd-${i}`}
+              position={[t.lat, t.lng]}
+              icon={createPtdIcon(t.usage)}
+            >
+              <Popup>
+                <div style={{ fontFamily: "sans-serif", fontSize: "13px", lineHeight: "1.6", minWidth: 160 }}>
+                  <p style={{ fontWeight: 700, fontSize: "14px", margin: "0 0 4px", color: "#06b6d4" }}>
+                    Posto de Transformação
+                  </p>
+                  <p style={{ margin: "0 0 2px" }}>
+                    Concelho: <strong>{t.municipality}</strong>
+                  </p>
+                  <p style={{ margin: "0 0 2px" }}>
+                    Potência: <strong>{t.kva} kVA</strong>
+                  </p>
+                  <p style={{ margin: "0 0 2px" }}>
+                    Utilização: <strong style={{ color: getPtdColor(t.usage) }}>{t.usage}</strong>
+                  </p>
+                  <p style={{ margin: 0 }}>
+                    Clientes: <strong>{t.clients}</strong>
+                  </p>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+        </MarkerClusterGroup>
+      )}
+
+      {/* Substation markers */}
+      {substations.map((s) => {
+        const color = getSubstationColor(s.latestLoad);
+        return (
+          <CircleMarker
+            key={`sub-${s.name}`}
+            center={[s.lat, s.lng]}
+            radius={8}
+            pathOptions={{
+              color,
+              fillColor: color,
+              fillOpacity: 0.5,
+              weight: 2,
+              dashArray: "2 4",
+            }}
+          >
+            <Popup>
+              <div style={{ fontFamily: "sans-serif", fontSize: "13px", lineHeight: "1.6", minWidth: 160 }}>
+                <p style={{ fontWeight: 700, fontSize: "14px", margin: "0 0 4px" }}>
+                  {s.name}
+                </p>
+                <p style={{ margin: "0 0 2px", color: "#10b981" }}>
+                  <strong>Subestação E-REDES</strong>
+                </p>
+                <p style={{ margin: 0 }}>
+                  Carga:{" "}
+                  <strong style={{ color }}>
+                    {s.latestLoad != null ? `${s.latestLoad.toFixed(2)} MW` : "sem dados"}
+                  </strong>
+                </p>
+              </div>
+            </Popup>
+          </CircleMarker>
         );
       })}
 
