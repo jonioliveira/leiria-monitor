@@ -12,7 +12,6 @@ import {
   AlertTriangle,
   ArrowRight,
   RefreshCw,
-  Wrench,
   ShieldAlert,
   ExternalLink,
   Satellite,
@@ -121,7 +120,7 @@ export default function HomePage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">
-            Recuperação — Distrito de Leiria
+            Rede Sentinela — Distrito de Leiria
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Monitorização após a tempestade Kristin (28 Jan 2026)
@@ -195,7 +194,7 @@ export default function HomePage() {
             <CardContent>
               <p className="text-2xl font-bold">{data?.summary.electricity.totalOutages ?? "—"}</p>
               <p className="text-xs text-muted-foreground">
-                Avarias · {data?.summary.electricity.municipalitiesAffected ?? 0} concelhos
+                Reportes · {data?.summary.electricity.municipalitiesAffected ?? 0} concelhos
               </p>
               <div className="mt-3 flex items-center text-xs text-primary">
                 Recuperação <ArrowRight className="ml-1 h-3 w-3" />
@@ -287,42 +286,21 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Recovery summary */}
-      <div className="grid gap-4 sm:grid-cols-2">
-        {(data?.summary.scheduledWork.count ?? 0) > 0 && (
-          <Card>
-            <CardContent className="flex items-center gap-3 py-4">
-              <Wrench className="h-5 w-5 text-cyan-400" />
-              <div>
-                <p className="text-sm font-medium">
-                  {data?.summary.scheduledWork.count} obras agendadas
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Interrupções planeadas pela E-REDES
-                </p>
-              </div>
-              <Link href="/recovery" className="ml-auto text-xs text-primary">
-                Ver <ArrowRight className="inline h-3 w-3" />
-              </Link>
-            </CardContent>
-          </Card>
-        )}
-
-        <Link href="/map">
-          <Card className="cursor-pointer transition-colors hover:bg-accent/50">
-            <CardContent className="flex items-center gap-3 py-4">
-              <Map className="h-5 w-5 text-primary" />
-              <div>
-                <p className="text-sm font-medium">Ver mapa completo</p>
-                <p className="text-xs text-muted-foreground">
-                  Avarias, antenas, ocorrências e reportes
-                </p>
-              </div>
-              <ArrowRight className="ml-auto h-4 w-4 text-primary" />
-            </CardContent>
-          </Card>
-        </Link>
-      </div>
+      {/* Map shortcut */}
+      <Link href="/map">
+        <Card className="cursor-pointer transition-colors hover:bg-accent/50">
+          <CardContent className="flex items-center gap-3 py-4">
+            <Map className="h-5 w-5 text-primary" />
+            <div>
+              <p className="text-sm font-medium">Ver mapa completo</p>
+              <p className="text-xs text-muted-foreground">
+                Reportes, antenas e ocorrências
+              </p>
+            </div>
+            <ArrowRight className="ml-auto h-4 w-4 text-primary" />
+          </CardContent>
+        </Card>
+      </Link>
     </div>
   );
 }
