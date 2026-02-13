@@ -5,10 +5,9 @@ import {
   ipmaWarnings,
   procivOccurrences,
   procivWarnings,
-  recoverySnapshots,
   eredesScheduledWork,
 } from "@/db/schema";
-import { desc, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
 export const revalidate = 60;
 
@@ -16,13 +15,8 @@ export async function GET() {
   const eredesEnabled = process.env.FEATURE_EREDES_ENABLED === "true";
 
   try {
-    const [snapshot, outages, warnings, occurrences, scheduledWork, populationWarnings] =
+    const [outages, warnings, occurrences, scheduledWork, populationWarnings] =
       await Promise.all([
-        db
-          .select()
-          .from(recoverySnapshots)
-          .orderBy(desc(recoverySnapshots.date))
-          .limit(1),
         eredesEnabled ? db.select().from(eredesOutages) : Promise.resolve([]),
         db.select().from(ipmaWarnings),
         db.select().from(procivOccurrences),
@@ -30,7 +24,6 @@ export async function GET() {
         db.select().from(procivWarnings),
       ]);
 
-    const latestSnapshot = snapshot[0] ?? null;
     const totalOutages = outages.reduce((sum, o) => sum + o.outageCount, 0);
 
     // Derive status levels
@@ -83,13 +76,6 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       timestamp: new Date().toISOString(),
-      recovery: latestSnapshot
-        ? {
-            score: latestSnapshot.overallScore,
-            date: latestSnapshot.date,
-            breakdown: latestSnapshot.metadata,
-          }
-        : null,
       summary: {
         electricity: {
           status: electricityStatus,
