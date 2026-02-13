@@ -60,9 +60,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!["electricity", "telecom"].includes(type)) {
+    if (!["electricity", "telecom_mobile", "telecom_fixed", "water"].includes(type)) {
       return NextResponse.json(
-        { success: false, error: "type deve ser 'electricity' ou 'telecom'" },
+        { success: false, error: "type deve ser 'electricity', 'telecom_mobile', 'telecom_fixed' ou 'water'" },
         { status: 400 }
       );
     }
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
       .insert(userReports)
       .values({
         type,
-        operator: type === "telecom" ? operator ?? null : null,
+        operator: type.startsWith("telecom") ? operator ?? null : null,
         description: description?.slice(0, 500) ?? null,
         street: street?.slice(0, 200) ?? null,
         lat,

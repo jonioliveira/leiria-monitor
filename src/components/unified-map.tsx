@@ -1,0 +1,824 @@
+"use client";
+
+import {
+  MapContainer,
+  TileLayer,
+  CircleMarker,
+  Marker,
+  Popup,
+  useMap,
+  useMapEvents,
+} from "react-leaflet";
+import MarkerClusterGroup from "react-leaflet-cluster";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import { useEffect, useState } from "react";
+
+/* ── Shared types (local to map) ──────────────────────────── */
+
+export interface MunicipalityData {
+  name: string;
+  lat: number;
+  lng: number;
+  outages: number;
+  meo?: {
+    rede_fixa_pct: number | null;
+    rede_movel_pct: number | null;
+    rede_fixa_previsao: string;
+    rede_movel_previsao: string;
+  } | null;
+}
+
+export interface Report {
+  id: number;
+  type: "electricity" | "telecom_mobile" | "telecom_fixed" | "water";
+  operator: string | null;
+  description: string | null;
+  street: string | null;
+  lat: number;
+  lng: number;
+  upvotes: number;
+  createdAt: string;
+}
+
+export interface SubstationMarker {
+  name: string;
+  lat: number;
+  lng: number;
+  latestLoad: number | null;
+}
+
+export interface TransformerMarker {
+  lat: number;
+  lng: number;
+  kva: number;
+  usage: string;
+  clients: number;
+  municipality: string;
+}
+
+export interface AntennaFeature {
+  lat: number;
+  lng: number;
+  operators: string[];
+  owner: string | null;
+  type: string;
+  technologies: string[];
+}
+
+export interface Occurrence {
+  id: number;
+  nature: string | null;
+  state: string | null;
+  municipality: string | null;
+  coordinates: { lat: number; lng: number } | null;
+  startTime: string | null;
+  numMeans: number | null;
+  numOperatives: number | null;
+}
+
+export interface InfraReportContext {
+  lat: number;
+  lng: number;
+  label: string;
+  type: "electricity" | "telecom_mobile" | "telecom_fixed" | "water";
+  operator: string | null;
+  details: string[];
+}
+
+export interface UnifiedMapProps {
+  layers: {
+    outages?: MunicipalityData[];
+    substations?: SubstationMarker[];
+    transformers?: TransformerMarker[];
+    antennas?: AntennaFeature[];
+    occurrences?: Occurrence[];
+    reports?: Report[];
+  };
+  visibleLayers: Set<string>;
+  visibleOperators?: Set<string>;
+  onMapClick?: (lat: number, lng: number) => void;
+  onReportInfra?: (ctx: InfraReportContext) => void;
+  onUpvote?: (id: number) => void;
+  onResolve?: (id: number) => void;
+  clickedPosition?: { lat: number; lng: number } | null;
+}
+
+/* ── Constants ─────────────────────────────────────────────── */
+
+const LEIRIA_CENTER: [number, number] = [39.65, -8.75];
+
+const OPERATOR_COLORS: Record<string, string> = {
+  MEO: "#00a3e0",
+  NOS: "#ff6600",
+  Vodafone: "#e60000",
+  DIGI: "#003087",
+};
+
+const TECH_LABELS: Record<string, string> = {
+  "2G": "Chamadas e SMS",
+  "3G": "Internet básica",
+  "4G": "Internet rápida",
+  "5G": "Internet muito rápida",
+  Móvel: "Rede móvel",
+};
+
+/* ── Helpers ───────────────────────────────────────────────── */
+
+function getElectricityColor(outages: number): string {
+  if (outages === 0) return "#10b981";
+  if (outages <= 5) return "#f59e0b";
+  if (outages <= 20) return "#f97316";
+  return "#ef4444";
+}
+
+function getElectricityRadius(outages: number): number {
+  if (outages === 0) return 8;
+  if (outages <= 5) return 12;
+  if (outages <= 20) return 16;
+  if (outages <= 50) return 20;
+  return 24;
+}
+
+function getTelecomColor(pct: number | null): string {
+  if (pct == null) return "#64748b";
+  if (pct >= 95) return "#10b981";
+  if (pct >= 80) return "#f59e0b";
+  if (pct >= 50) return "#f97316";
+  return "#ef4444";
+}
+
+function getReportColor(type: string, operator: string | null): string {
+  if (type === "electricity") return "#f59e0b";
+  if (type === "telecom_mobile") {
+    switch (operator) {
+      case "MEO": return "#00a3e0";
+      case "NOS": return "#ff6600";
+      case "Vodafone": return "#e60000";
+      case "DIGI": return "#003087";
+      default: return "#3b82f6";
+    }
+  }
+  if (type === "telecom_fixed") {
+    switch (operator) {
+      case "MEO": return "#00a3e0";
+      case "NOS": return "#ff6600";
+      case "Vodafone": return "#e60000";
+      case "DIGI": return "#003087";
+      default: return "#6366f1";
+    }
+  }
+  if (type === "water") return "#06b6d4";
+  return "#8b5cf6";
+}
+
+function getSubstationColor(load: number | null): string {
+  if (load == null) return "#64748b";
+  if (load > 5) return "#10b981";
+  if (load > 0) return "#f59e0b";
+  return "#ef4444";
+}
+
+function getPtdColor(usage: string): string {
+  if (usage.includes("60") || usage.includes("80") || usage.includes("100"))
+    return "#10b981";
+  if (usage.includes("40")) return "#f59e0b";
+  return "#64748b";
+}
+
+function createPtdIcon(usage: string): L.DivIcon {
+  const color = getPtdColor(usage);
+  return L.divIcon({
+    html: `<div style="width:10px;height:10px;border-radius:50%;background:${color};border:1.5px solid white;box-shadow:0 0 3px rgba(0,0,0,0.3)"></div>`,
+    className: "",
+    iconSize: [10, 10],
+    iconAnchor: [5, 5],
+  });
+}
+
+function getAntennaMarkerColor(operators: string[]): string {
+  if (operators.length > 1) return "#8b5cf6";
+  return OPERATOR_COLORS[operators[0]] ?? "#64748b";
+}
+
+function createAntennaIcon(operators: string[]): L.DivIcon {
+  const color = getAntennaMarkerColor(operators);
+  return L.divIcon({
+    html: `<div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer"><div style="width:14px;height:14px;border-radius:50%;background:${color};border:2px solid white;box-shadow:0 0 4px rgba(0,0,0,0.35)"></div></div>`,
+    className: "",
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
+  });
+}
+
+const defaultOccurrenceIcon = L.divIcon({
+  html: `<div style="width:12px;height:12px;border-radius:50%;background:#ef4444;border:2px solid white;box-shadow:0 0 4px rgba(0,0,0,0.35)"></div>`,
+  className: "",
+  iconSize: [12, 12],
+  iconAnchor: [6, 6],
+});
+
+const clickedPinIcon = L.divIcon({
+  html: `<div style="display:flex;flex-direction:column;align-items:center">
+    <div style="width:28px;height:28px;border-radius:50% 50% 50% 0;background:var(--primary,#3b82f6);transform:rotate(-45deg);border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.4);animation:clickPulse 1.5s ease-in-out infinite"></div>
+    <div style="width:6px;height:6px;border-radius:50%;background:rgba(0,0,0,0.25);margin-top:2px"></div>
+  </div>
+  <style>@keyframes clickPulse{0%,100%{transform:scale(1) rotate(-45deg)}50%{transform:scale(1.15) rotate(-45deg)}}</style>`,
+  className: "",
+  iconSize: [28, 40],
+  iconAnchor: [14, 40],
+});
+
+function timeAgo(dateStr: string): string {
+  const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
+  if (mins < 1) return "agora";
+  if (mins < 60) return `há ${mins}min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `há ${hours}h`;
+  return `há ${Math.floor(hours / 24)}d`;
+}
+
+/* ── Click handler ─────────────────────────────────────────── */
+
+function ClickHandler({ onClick }: { onClick: (lat: number, lng: number) => void }) {
+  useMapEvents({ click(e) { onClick(e.latlng.lat, e.latlng.lng); } });
+  return null;
+}
+
+/* ── Legend ─────────────────────────────────────────────────── */
+
+function Legend({ visibleLayers }: { visibleLayers: Set<string> }) {
+  const map = useMap();
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (window.innerWidth < 640) setCollapsed(true);
+  }, []);
+
+  useEffect(() => {
+    const legend = new L.Control({ position: "bottomright" });
+
+    legend.onAdd = () => {
+      const div = L.DomUtil.create("div", "");
+      div.style.cssText =
+        "background:rgba(255,255,255,0.92);padding:10px 14px;border-radius:8px;border:1px solid #d1d5db;font-size:12px;color:#1f2937;line-height:1.8;box-shadow:0 1px 4px rgba(0,0,0,0.1);cursor:pointer;user-select:none;max-height:300px;overflow-y:auto;";
+
+      if (collapsed) {
+        div.innerHTML = "<strong style='font-size:12px'>Legenda ▲</strong>";
+      } else {
+        let html = "<strong style='font-size:12px'>Legenda ▼</strong><br/>";
+
+        if (visibleLayers.has("outages")) {
+          html += "<strong style='color:#f59e0b'>Avarias</strong><br/>";
+          html += `<span style="color:#10b981">&#9679;</span> Sem avarias<br/>`;
+          html += `<span style="color:#f59e0b">&#9679;</span> 1–5 avarias<br/>`;
+          html += `<span style="color:#f97316">&#9679;</span> 6–20 avarias<br/>`;
+          html += `<span style="color:#ef4444">&#9679;</span> &gt;20 avarias<br/>`;
+        }
+
+        if (visibleLayers.has("substations")) {
+          html += "<strong style='color:#10b981'>Subestações</strong><br/>";
+          html += `<span style="color:#10b981">&#9670;</span> Carga &gt;5 MW<br/>`;
+          html += `<span style="color:#f59e0b">&#9670;</span> Carga baixa<br/>`;
+          html += `<span style="color:#ef4444">&#9670;</span> Sem carga<br/>`;
+        }
+
+        if (visibleLayers.has("transformers")) {
+          html += "<strong style='color:#06b6d4'>Postos Transformação</strong><br/>";
+          html += `<span style="color:#10b981">&#9679;</span> Util. &ge;60%<br/>`;
+          html += `<span style="color:#f59e0b">&#9679;</span> Util. 40–59%<br/>`;
+          html += `<span style="color:#64748b">&#9679;</span> Util. &lt;40%<br/>`;
+        }
+
+        if (visibleLayers.has("antennas")) {
+          html += "<strong style='color:#6366f1'>Antenas</strong><br/>";
+          html += `<span style="color:#00a3e0">&#9679;</span> MEO<br/>`;
+          html += `<span style="color:#ff6600">&#9679;</span> NOS<br/>`;
+          html += `<span style="color:#e60000">&#9679;</span> Vodafone<br/>`;
+          html += `<span style="color:#003087">&#9679;</span> DIGI<br/>`;
+          html += `<span style="color:#8b5cf6">&#9679;</span> Partilhada<br/>`;
+        }
+
+        if (visibleLayers.has("occurrences")) {
+          html += "<strong style='color:#ef4444'>Ocorrências</strong><br/>";
+          html += `<span style="color:#ef4444">&#9679;</span> Ativa<br/>`;
+        }
+
+        if (visibleLayers.has("reports")) {
+          html += "<strong style='color:#8b5cf6'>Reportes</strong><br/>";
+          html += `<span style="color:#f59e0b">&#9650;</span> Sem luz<br/>`;
+          html += `<span style="color:#3b82f6">&#9650;</span> Sem rede móvel<br/>`;
+          html += `<span style="color:#6366f1">&#9650;</span> Sem rede fixa<br/>`;
+          html += `<span style="color:#06b6d4">&#9650;</span> Sem água<br/>`;
+        }
+
+        div.innerHTML = html;
+      }
+
+      div.onclick = (e) => {
+        e.stopPropagation();
+        setCollapsed((prev) => !prev);
+      };
+
+      return div;
+    };
+
+    legend.addTo(map);
+    return () => { legend.remove(); };
+  }, [map, collapsed, visibleLayers]);
+
+  return null;
+}
+
+/* ── Main Component ────────────────────────────────────────── */
+
+export function UnifiedMap({
+  layers,
+  visibleLayers,
+  visibleOperators,
+  onMapClick,
+  onReportInfra,
+  onUpvote,
+  onResolve,
+  clickedPosition,
+}: UnifiedMapProps) {
+  const outages = layers.outages ?? [];
+  const substations = layers.substations ?? [];
+  const transformers = layers.transformers ?? [];
+  const antennas = layers.antennas ?? [];
+  const occurrences = layers.occurrences ?? [];
+  const reports = layers.reports ?? [];
+
+  const filteredAntennas = visibleOperators
+    ? antennas.filter((a) => a.operators.some((op) => visibleOperators.has(op)))
+    : antennas;
+
+  // Build coordinate → reports lookup for infrastructure matching
+  const reportsByCoords = new Map<string, Report[]>();
+  for (const r of reports) {
+    const key = `${r.lat.toFixed(5)},${r.lng.toFixed(5)}`;
+    const arr = reportsByCoords.get(key);
+    if (arr) arr.push(r);
+    else reportsByCoords.set(key, [r]);
+  }
+  function findReportsAt(lat: number, lng: number): Report[] {
+    return reportsByCoords.get(`${lat.toFixed(5)},${lng.toFixed(5)}`) ?? [];
+  }
+
+  return (
+    <MapContainer
+      center={LEIRIA_CENTER}
+      zoom={10}
+      className="h-full w-full"
+      scrollWheelZoom={true}
+    >
+      <TileLayer
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+      />
+      <Legend visibleLayers={visibleLayers} />
+      {onMapClick && <ClickHandler onClick={onMapClick} />}
+
+      {/* ── Clicked position pin ──────────────────────────── */}
+      {clickedPosition && (
+        <Marker
+          position={[clickedPosition.lat, clickedPosition.lng]}
+          icon={clickedPinIcon}
+          zIndexOffset={1000}
+        >
+          <Popup>
+            <div style={{ fontFamily: "sans-serif", fontSize: "13px", textAlign: "center", padding: "4px 0" }}>
+              <strong>Local selecionado</strong>
+              <p style={{ margin: "4px 0 0", fontSize: "11px", color: "#64748b" }}>
+                {clickedPosition.lat.toFixed(5)}, {clickedPosition.lng.toFixed(5)}
+              </p>
+            </div>
+          </Popup>
+        </Marker>
+      )}
+
+      {/* ── Outages layer ─────────────────────────────────── */}
+      {visibleLayers.has("outages") &&
+        outages.map((m) => (
+          <CircleMarker
+            key={`outage-${m.name}`}
+            center={[m.lat, m.lng]}
+            radius={getElectricityRadius(m.outages)}
+            pathOptions={{
+              color: getElectricityColor(m.outages),
+              fillColor: getElectricityColor(m.outages),
+              fillOpacity: 0.35,
+              weight: 2,
+            }}
+          >
+            <Popup>
+              <div style={{ fontFamily: "sans-serif", fontSize: "13px", lineHeight: "1.6", minWidth: 180 }}>
+                <p style={{ fontWeight: 700, fontSize: "14px", margin: "0 0 6px" }}>{m.name}</p>
+                <p style={{ margin: "0 0 2px", color: "#f59e0b" }}>
+                  <strong>Eletricidade</strong>
+                </p>
+                <p style={{ margin: 0 }}>
+                  Avarias:{" "}
+                  <strong style={{ color: m.outages > 0 ? "#ef4444" : "#10b981" }}>
+                    {m.outages}
+                  </strong>
+                </p>
+                {m.meo && (
+                  <>
+                    <hr style={{ margin: "8px 0", border: "none", borderTop: "1px solid #e2e8f0" }} />
+                    <p style={{ margin: "0 0 2px", color: "#3b82f6" }}>
+                      <strong>MEO</strong>
+                    </p>
+                    <p style={{ margin: 0 }}>
+                      Móvel:{" "}
+                      <strong style={{ color: getTelecomColor(m.meo.rede_movel_pct) }}>
+                        {m.meo.rede_movel_pct != null ? `${m.meo.rede_movel_pct}%` : "s/d"}
+                      </strong>
+                    </p>
+                    <p style={{ margin: 0 }}>
+                      Fixa:{" "}
+                      <strong style={{ color: getTelecomColor(m.meo.rede_fixa_pct) }}>
+                        {m.meo.rede_fixa_pct != null ? `${m.meo.rede_fixa_pct}%` : "s/d"}
+                      </strong>
+                    </p>
+                  </>
+                )}
+              </div>
+            </Popup>
+          </CircleMarker>
+        ))}
+
+      {/* ── Substations layer ─────────────────────────────── */}
+      {visibleLayers.has("substations") &&
+        substations.map((s) => {
+          const color = getSubstationColor(s.latestLoad);
+          return (
+            <CircleMarker
+              key={`sub-${s.name}`}
+              center={[s.lat, s.lng]}
+              radius={8}
+              pathOptions={{
+                color,
+                fillColor: color,
+                fillOpacity: 0.5,
+                weight: 2,
+                dashArray: "2 4",
+              }}
+            >
+              <Popup>
+                <div style={{ fontFamily: "sans-serif", fontSize: "13px", lineHeight: "1.6", minWidth: 160 }}>
+                  <p style={{ fontWeight: 700, fontSize: "14px", margin: "0 0 4px" }}>
+                    {s.name}
+                  </p>
+                  <p style={{ margin: "0 0 2px", color: "#10b981" }}>
+                    <strong>Subestação E-REDES</strong>
+                  </p>
+                  <p style={{ margin: 0 }}>
+                    Carga:{" "}
+                    <strong style={{ color }}>
+                      {s.latestLoad != null ? `${s.latestLoad.toFixed(2)} MW` : "sem dados"}
+                    </strong>
+                  </p>
+                </div>
+              </Popup>
+            </CircleMarker>
+          );
+        })}
+
+      {/* ── Transformers (PTD) layer — clustered ──────────── */}
+      {visibleLayers.has("transformers") && transformers.length > 0 && (
+        <MarkerClusterGroup
+          chunkedLoading
+          maxClusterRadius={50}
+          spiderfyOnMaxZoom
+          showCoverageOnHover={false}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          iconCreateFunction={(cluster: any) => {
+            const count = cluster.getChildCount();
+            let dim = 30;
+            if (count > 100) dim = 44;
+            else if (count > 30) dim = 36;
+            return L.divIcon({
+              html: `<div style="background:rgba(6,182,212,0.75);color:white;border-radius:50%;width:${dim}px;height:${dim}px;display:flex;align-items:center;justify-content:center;font-size:${dim > 36 ? 13 : 11}px;font-weight:600;border:2px solid rgba(255,255,255,0.8);box-shadow:0 2px 6px rgba(0,0,0,0.3)">${count}</div>`,
+              className: "",
+              iconSize: L.point(dim, dim),
+            });
+          }}
+        >
+          {transformers.map((t, i) => {
+            const existingReports = findReportsAt(t.lat, t.lng);
+            const hasReport = existingReports.length > 0;
+            return (
+              <Marker key={`ptd-${i}`} position={[t.lat, t.lng]} icon={createPtdIcon(t.usage)}>
+                <Popup>
+                  <div style={{ fontFamily: "sans-serif", fontSize: "13px", lineHeight: "1.6", minWidth: 160 }}>
+                    <p style={{ fontWeight: 700, fontSize: "14px", margin: "0 0 4px", color: "#06b6d4" }}>
+                      Posto de Transformação
+                    </p>
+                    <p style={{ margin: "0 0 2px" }}>
+                      Concelho: <strong>{t.municipality}</strong>
+                    </p>
+                    <p style={{ margin: "0 0 2px" }}>
+                      Potência: <strong>{t.kva} kVA</strong>
+                    </p>
+                    <p style={{ margin: "0 0 2px" }}>
+                      Utilização: <strong style={{ color: getPtdColor(t.usage) }}>{t.usage}</strong>
+                    </p>
+                    <p style={{ margin: 0 }}>
+                      Clientes: <strong>{t.clients}</strong>
+                    </p>
+                    {hasReport ? (
+                      <div style={{ marginTop: 10, padding: "6px 8px", borderRadius: 6, background: "#fef2f2", border: "1px solid #fecaca" }}>
+                        <p style={{ margin: "0 0 4px", fontSize: "12px", fontWeight: 700, color: "#dc2626" }}>
+                          Problema reportado
+                        </p>
+                        {existingReports[0].description && (
+                          <p style={{ margin: "0 0 4px", fontSize: "12px", color: "#64748b" }}>
+                            {existingReports[0].description}
+                          </p>
+                        )}
+                        <p style={{ margin: "0 0 6px", fontSize: "11px", color: "#94a3b8" }}>
+                          {timeAgo(existingReports[0].createdAt)} · {existingReports[0].upvotes} confirmação{existingReports[0].upvotes !== 1 ? "ões" : ""}
+                        </p>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          {onUpvote && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); onUpvote(existingReports[0].id); }}
+                              style={{
+                                flex: 1, padding: "4px 8px", fontSize: "12px", borderRadius: 6,
+                                border: "1px solid #334e68", background: "#1e3a5f", color: "#93c5fd",
+                                cursor: "pointer",
+                              }}
+                            >
+                              +1 Confirmo
+                            </button>
+                          )}
+                          {onResolve && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); onResolve(existingReports[0].id); }}
+                              style={{
+                                flex: 1, padding: "4px 8px", fontSize: "12px", borderRadius: 6,
+                                border: "1px solid #334e68", background: "#1a332e", color: "#6ee7b7",
+                                cursor: "pointer",
+                              }}
+                            >
+                              Resolvido
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ) : onReportInfra ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onReportInfra({
+                            lat: t.lat,
+                            lng: t.lng,
+                            label: "Posto de Transformação",
+                            type: "electricity",
+                            operator: null,
+                            details: [
+                              `Concelho: ${t.municipality}`,
+                              `Potência: ${t.kva} kVA`,
+                              `Utilização: ${t.usage}`,
+                              `Clientes: ${t.clients}`,
+                            ],
+                          });
+                        }}
+                        style={{
+                          marginTop: 10, padding: "5px 12px", fontSize: "12px", borderRadius: 6,
+                          border: "1px solid #dc2626", background: "#fef2f2", color: "#dc2626",
+                          cursor: "pointer", fontWeight: 600, width: "100%",
+                        }}
+                      >
+                        Reportar problema
+                      </button>
+                    ) : null}
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          })}
+        </MarkerClusterGroup>
+      )}
+
+      {/* ── Antennas layer — clustered ────────────────────── */}
+      {visibleLayers.has("antennas") && filteredAntennas.length > 0 && (
+        <MarkerClusterGroup
+          chunkedLoading
+          maxClusterRadius={50}
+          spiderfyOnMaxZoom
+          showCoverageOnHover={false}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          iconCreateFunction={(cluster: any) => {
+            const count = cluster.getChildCount();
+            let dim = 34;
+            if (count > 100) dim = 48;
+            else if (count > 30) dim = 40;
+            return L.divIcon({
+              html: `<div style="background:rgba(99,102,241,0.85);color:white;border-radius:50%;width:${dim}px;height:${dim}px;display:flex;align-items:center;justify-content:center;font-size:${dim > 40 ? 14 : 12}px;font-weight:600;border:2px solid rgba(255,255,255,0.85);box-shadow:0 2px 8px rgba(0,0,0,0.3)">${count}</div>`,
+              className: "",
+              iconSize: L.point(dim, dim),
+            });
+          }}
+        >
+          {filteredAntennas.map((a, i) => {
+            const existingReports = findReportsAt(a.lat, a.lng);
+            const hasReport = existingReports.length > 0;
+            return (
+              <Marker key={`ant-${i}`} position={[a.lat, a.lng]} icon={createAntennaIcon(a.operators)}>
+                <Popup>
+                  <div style={{ fontFamily: "sans-serif", fontSize: "14px", lineHeight: "1.7", minWidth: 180, maxWidth: 240 }}>
+                    <p style={{ fontWeight: 700, fontSize: "15px", margin: "0 0 6px", color: "#1f2937" }}>
+                      {a.operators.length > 1 ? "Antena partilhada" : `Antena ${a.operators[0]}`}
+                    </p>
+                    {a.operators.map((op) => (
+                      <p key={op} style={{ margin: "0 0 2px" }}>
+                        <span
+                          style={{
+                            display: "inline-block",
+                            width: 10,
+                            height: 10,
+                            borderRadius: "50%",
+                            backgroundColor: OPERATOR_COLORS[op] ?? "#64748b",
+                            marginRight: 6,
+                            verticalAlign: "middle",
+                          }}
+                        />
+                        <strong>{op}</strong>
+                      </p>
+                    ))}
+                    {a.technologies.length > 0 && (
+                      <p style={{ margin: "6px 0 0", fontSize: "12px", color: "#64748b" }}>
+                        {a.technologies.map((t) => TECH_LABELS[t] ?? t).join(" · ")}
+                      </p>
+                    )}
+                    {hasReport ? (
+                      <div style={{ marginTop: 10, padding: "6px 8px", borderRadius: 6, background: "#fef2f2", border: "1px solid #fecaca" }}>
+                        <p style={{ margin: "0 0 4px", fontSize: "12px", fontWeight: 700, color: "#dc2626" }}>
+                          Problema reportado
+                        </p>
+                        {existingReports[0].description && (
+                          <p style={{ margin: "0 0 4px", fontSize: "12px", color: "#64748b" }}>
+                            {existingReports[0].description}
+                          </p>
+                        )}
+                        <p style={{ margin: "0 0 6px", fontSize: "11px", color: "#94a3b8" }}>
+                          {timeAgo(existingReports[0].createdAt)} · {existingReports[0].upvotes} confirmação{existingReports[0].upvotes !== 1 ? "ões" : ""}
+                        </p>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          {onUpvote && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); onUpvote(existingReports[0].id); }}
+                              style={{
+                                flex: 1, padding: "4px 8px", fontSize: "12px", borderRadius: 6,
+                                border: "1px solid #334e68", background: "#1e3a5f", color: "#93c5fd",
+                                cursor: "pointer",
+                              }}
+                            >
+                              +1 Confirmo
+                            </button>
+                          )}
+                          {onResolve && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); onResolve(existingReports[0].id); }}
+                              style={{
+                                flex: 1, padding: "4px 8px", fontSize: "12px", borderRadius: 6,
+                                border: "1px solid #334e68", background: "#1a332e", color: "#6ee7b7",
+                                cursor: "pointer",
+                              }}
+                            >
+                              Resolvido
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ) : onReportInfra ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onReportInfra({
+                            lat: a.lat,
+                            lng: a.lng,
+                            label: a.operators.length > 1
+                              ? "Antena partilhada"
+                              : `Antena ${a.operators[0]}`,
+                            type: "telecom_mobile",
+                            operator: a.operators.length === 1 ? a.operators[0] : null,
+                            details: [
+                              `Operadores: ${a.operators.join(", ")}`,
+                              ...(a.technologies.length > 0
+                                ? [`Tecnologias: ${a.technologies.join(", ")}`]
+                                : []),
+                            ],
+                          });
+                        }}
+                        style={{
+                          marginTop: 10, padding: "5px 12px", fontSize: "12px", borderRadius: 6,
+                          border: "1px solid #dc2626", background: "#fef2f2", color: "#dc2626",
+                          cursor: "pointer", fontWeight: 600, width: "100%",
+                        }}
+                      >
+                        Reportar problema
+                      </button>
+                    ) : null}
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          })}
+        </MarkerClusterGroup>
+      )}
+
+      {/* ── Occurrences layer ─────────────────────────────── */}
+      {visibleLayers.has("occurrences") &&
+        occurrences
+          .filter((o) => o.coordinates != null)
+          .map((o) => (
+            <Marker
+              key={`occ-${o.id}`}
+              position={[o.coordinates!.lat, o.coordinates!.lng]}
+              icon={defaultOccurrenceIcon}
+            >
+              <Popup>
+                <div style={{ fontFamily: "sans-serif", fontSize: "13px", lineHeight: "1.6", minWidth: 160 }}>
+                  <p style={{ fontWeight: 700, fontSize: "14px", margin: "0 0 4px", color: "#ef4444" }}>
+                    {o.nature ?? "Ocorrência"}
+                  </p>
+                  <p style={{ margin: "0 0 2px" }}>{o.municipality}</p>
+                  {o.state && <p style={{ margin: "0 0 2px" }}>Estado: {o.state}</p>}
+                  {o.numMeans != null && <p style={{ margin: "0 0 2px" }}>Meios: {o.numMeans}</p>}
+                  {o.numOperatives != null && <p style={{ margin: "0 0 2px" }}>Operacionais: {o.numOperatives}</p>}
+                  {o.startTime && (
+                    <p style={{ margin: "4px 0 0", fontSize: "11px", color: "#94a3b8" }}>
+                      Início: {new Date(o.startTime).toLocaleString("pt-PT")}
+                    </p>
+                  )}
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+
+      {/* ── Reports layer ─────────────────────────────────── */}
+      {visibleLayers.has("reports") &&
+        reports.map((r) => {
+          const color = getReportColor(r.type, r.operator);
+          const radius = Math.min(6 + r.upvotes * 1.5, 18);
+          return (
+            <CircleMarker
+              key={`report-${r.id}`}
+              center={[r.lat, r.lng]}
+              radius={radius}
+              pathOptions={{ color, fillColor: color, fillOpacity: 0.45, weight: 2 }}
+            >
+              <Popup>
+                <div style={{ fontFamily: "sans-serif", fontSize: "13px", lineHeight: "1.6", minWidth: 200 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                    <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: color }} />
+                    <strong style={{ fontSize: "14px" }}>
+                      {r.type === "electricity" ? "Sem luz" : r.type === "telecom_mobile" ? `Sem rede móvel${r.operator ? ` ${r.operator}` : ""}` : r.type === "telecom_fixed" ? `Sem rede fixa${r.operator ? ` ${r.operator}` : ""}` : "Sem água"}
+                    </strong>
+                  </div>
+                  {r.street && (
+                    <p style={{ margin: "2px 0", fontSize: "12px", color: "#64748b" }}>{r.street}</p>
+                  )}
+                  {r.description && <p style={{ margin: "4px 0" }}>{r.description}</p>}
+                  <p style={{ margin: "6px 0 2px", fontSize: "11px", color: "#94a3b8" }}>
+                    {timeAgo(r.createdAt)} · {r.upvotes} confirmação{r.upvotes !== 1 ? "ões" : ""}
+                  </p>
+                  {(onUpvote || onResolve) && (
+                    <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                      {onUpvote && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onUpvote(r.id); }}
+                          style={{
+                            padding: "4px 10px", fontSize: "12px", borderRadius: 6,
+                            border: "1px solid #334e68", background: "#1e3a5f", color: "#93c5fd",
+                            cursor: "pointer",
+                          }}
+                        >
+                          +1 Confirmo
+                        </button>
+                      )}
+                      {onResolve && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onResolve(r.id); }}
+                          style={{
+                            padding: "4px 10px", fontSize: "12px", borderRadius: 6,
+                            border: "1px solid #334e68", background: "#1a332e", color: "#6ee7b7",
+                            cursor: "pointer",
+                          }}
+                        >
+                          Resolvido
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </Popup>
+            </CircleMarker>
+          );
+        })}
+    </MapContainer>
+  );
+}

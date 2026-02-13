@@ -23,7 +23,7 @@ export function OutageChart({ data }: OutageChartProps) {
   if (data.length === 0) {
     return (
       <div className="flex h-64 items-center justify-center text-muted-foreground">
-        Sem dados de avarias registados
+        Sem reportes registados
       </div>
     );
   }
@@ -48,7 +48,7 @@ export function OutageChart({ data }: OutageChartProps) {
             color: "#d9e2ec",
             fontSize: "13px",
           }}
-          formatter={(value: number) => [`${value} avarias`, "Total"]}
+          formatter={(value: number) => [`${value} reportes`, "Total"]}
         />
         <Bar dataKey="count" radius={[0, 4, 4, 0]}>
           {sorted.map((entry, index) => (

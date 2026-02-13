@@ -9,6 +9,9 @@ const OPERATOR_ENDPOINTS = [
 ];
 
 const MEO_AVAILABILITY_URL = "https://www.meo.pt/disponibilidade-servicos-meo";
+// The actual data lives in a SharePoint-hosted app iframe
+const MEO_APP_URL =
+  "https://app-ef66ba3b-3a54-42d4-9559-560dd50c913d.apps.meo.pt/Pages/Default.aspx?SenderId=346DB3AC0";
 const NOS_INCIDENTS_URL = "https://www.nos.pt/ocorrencias";
 const VODAFONE_STATUS_URL =
   "https://www.vodafone.pt/info/estado-da-rede.html";
@@ -290,7 +293,8 @@ async function scrapeMeoAvailability(): Promise<MeoAvailability> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
 
-    const res = await fetch(MEO_AVAILABILITY_URL, {
+    // Fetch the SharePoint-hosted app page (the parent page just has an iframe)
+    const res = await fetch(MEO_APP_URL, {
       signal: controller.signal,
       headers: {
         "User-Agent":
@@ -305,68 +309,111 @@ async function scrapeMeoAvailability(): Promise<MeoAvailability> {
 
     const html = await res.text();
 
-    // Extract update date
+    // Extract update date — new format: "Atualizado a DD/MM/YYYY"
     const dateMatch = html.match(
-      /Data de atualiza[çc][ãa]o:\s*(\d{2}-\d{2}-\d{4})/i
+      /Atualizado\s+a\s+(\d{2})\/(\d{2})\/(\d{4})/i
     );
     if (dateMatch) {
-      const [dd, mm, yyyy] = dateMatch[1].split("-");
-      result.last_updated = `${yyyy}-${mm}-${dd}`;
+      result.last_updated = `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`;
     }
 
-    // Parse global summary from <article class="situacao_global"> table
-    // Structure: <td>fixa%</td><td>fixa previsão</td><td>móvel%</td><td>móvel previsão</td>
-    const globalSection = html.match(/situacao_global[\s\S]*?<\/article>/i);
+    // Parse global summary from the new HTML structure
+    // <ul class="table-info"> with nested <li> containing <p>label</p><p>value</p>
+    const globalSection = html.match(
+      /Situa[çc][ãa]o global[\s\S]*?<\/ul>\s*<\/div>/i
+    );
     if (globalSection) {
-      const globalTds = [...globalSection[0].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => stripHtml(m[1]));
-      if (globalTds.length >= 4) {
+      const pValues = [
+        ...globalSection[0].matchAll(
+          /<ul class="table-info-item-descriptions">([\s\S]*?)<\/ul>/gi
+        ),
+      ];
+
+      // First <ul> = Rede Fixa, Second <ul> = Rede Móvel
+      // Each has <li><p>label</p><p>value</p></li> pairs
+      const extractValues = (ulContent: string): string[] => {
+        return [...ulContent.matchAll(/<li>[\s\S]*?<p>([\s\S]*?)<\/p>[\s\S]*?<p>([\s\S]*?)<\/p>[\s\S]*?<\/li>/gi)]
+          .map((m) => stripHtml(m[2]));
+      };
+
+      if (pValues.length >= 2) {
+        const fixaVals = extractValues(pValues[0][1]);
+        const movelVals = extractValues(pValues[1][1]);
+
         result.global = {
-          rede_fixa_pct: parsePercentage(globalTds[0]),
-          rede_fixa_previsao_95: globalTds[1],
-          rede_movel_pct: parsePercentage(globalTds[2]),
-          rede_movel_previsao_95: globalTds[3],
+          rede_fixa_pct: fixaVals[0] ? parsePercentage(fixaVals[0]) : null,
+          rede_fixa_previsao_95: fixaVals[1] ?? "",
+          rede_movel_pct: movelVals[0] ? parsePercentage(movelVals[0]) : null,
+          rede_movel_previsao_95: movelVals[1] ?? "",
         };
       }
     }
 
-    // Parse per-concelho table rows
-    // Each row: <td>Concelho</td><td>Distrito</td><td>Fixa%</td><td>Previsão</td><td>Móvel%</td><td>Previsão</td>
-    const rowPattern = /<tr[^>]*>\s*(?:<td[^>]*>([\s\S]*?)<\/td>\s*){6}<\/tr>/gi;
-    const headerTerms = ["concelho", "distrito", "grau", "previsão", "previs", "rede", "população"];
+    // Parse per-concelho data from embedded JSON in MeoMapNetwork.Init({ defaultPOIs: [...] })
+    const poisMatch = html.match(/defaultPOIs\s*:\s*(\[[\s\S]*?\])\s*,/);
+    if (poisMatch) {
+      try {
+        const pois: {
+          Name: string;
+          Address: string; // distrito name
+          PercentLandline: string;
+          DateLandline: string;
+          PercentMobile: string;
+          DateMobile: string;
+        }[] = JSON.parse(poisMatch[1]);
 
-    let match;
-    while ((match = rowPattern.exec(html)) !== null) {
-      const tds = [...match[0].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => stripHtml(m[1]));
-      if (tds.length < 6) continue;
+        for (const poi of pois) {
+          // Normalize name: "LEIRIA" -> "Leiria", "MARINHA GRANDE" -> "Marinha Grande"
+          const concelho = poi.Name
+            .split(" ")
+            .map((w) => {
+              const lower = w.toLowerCase();
+              // Keep prepositions lowercase
+              if (["de", "do", "da", "dos", "das", "a", "e", "o"].includes(lower))
+                return lower;
+              return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+            })
+            .join(" ");
 
-      const concelho = tds[0];
+          // Address field contains the distrito
+          const distrito = poi.Address
+            .split(" ")
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+            .join(" ");
 
-      if (
-        headerTerms.some((t) => concelho.toLowerCase().includes(t)) ||
-        concelho === "---" || !concelho
-      ) {
-        continue;
-      }
+          // Handle "Disponibilidade >= 95%" as a previsão value
+          const fixaPrevisao = poi.DateLandline?.includes("95%")
+            ? "Disponibilidade >= 95%"
+            : poi.DateLandline ?? "";
+          const movelPrevisao = poi.DateMobile?.includes("95%")
+            ? "Disponibilidade >= 95%"
+            : poi.DateMobile ?? "";
 
-      const distrito = tds[1];
-      const entry: MeoConcelhoData = {
-        concelho,
-        distrito,
-        rede_fixa_pct: parsePercentage(tds[2]),
-        rede_fixa_previsao: tds[3],
-        rede_movel_pct: parsePercentage(tds[4]),
-        rede_movel_previsao: tds[5],
-        is_leiria_district: distrito === "Leiria",
-      };
+          const entry: MeoConcelhoData = {
+            concelho,
+            distrito,
+            rede_fixa_pct: parsePercentage(poi.PercentLandline),
+            rede_fixa_previsao: fixaPrevisao,
+            rede_movel_pct: parsePercentage(poi.PercentMobile),
+            rede_movel_previsao: movelPrevisao,
+            is_leiria_district: distrito === "Leiria",
+          };
 
-      result.concelhos.push(entry);
+          result.concelhos.push(entry);
 
-      if (entry.is_leiria_district) {
-        result.leiria_district.push(entry);
-      }
+          if (entry.is_leiria_district) {
+            result.leiria_district.push(entry);
+          }
 
-      if (concelho === "Leiria" && distrito === "Leiria") {
-        result.leiria_concelho = entry;
+          if (
+            poi.Name.toUpperCase() === "LEIRIA" &&
+            distrito === "Leiria"
+          ) {
+            result.leiria_concelho = entry;
+          }
+        }
+      } catch {
+        // JSON parsing failed
       }
     }
 

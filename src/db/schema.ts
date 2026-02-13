@@ -93,10 +93,21 @@ export const procivWarnings = pgTable("prociv_warnings", {
   fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const antennas = pgTable("antennas", {
+  id: serial("id").primaryKey(),
+  lat: real("lat").notNull(),
+  lng: real("lng").notNull(),
+  operators: text("operators").array().notNull(),
+  owner: text("owner"),
+  type: text("type").notNull(), // "mast" | "tower" | "other"
+  technologies: text("technologies").array().notNull(),
+  fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const userReports = pgTable("user_reports", {
   id: serial("id").primaryKey(),
-  type: text("type").notNull(), // "electricity" | "telecom"
-  operator: text("operator"), // null for electricity, "MEO"/"NOS"/"Vodafone"/"DIGI" for telecom
+  type: text("type").notNull(), // "electricity" | "telecom_mobile" | "telecom_fixed" | "water"
+  operator: text("operator"), // null for electricity/water, "MEO"/"NOS"/"Vodafone"/"DIGI" for telecom types
   description: text("description"),
   street: text("street"),
   lat: real("lat").notNull(),

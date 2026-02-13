@@ -6,7 +6,21 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WarningBadge } from "@/components/warning-badge";
-import { Zap, CloudRain, AlertTriangle, ArrowRight, RefreshCw, Wrench, ShieldAlert, ExternalLink, Satellite } from "lucide-react";
+import {
+  Zap,
+  CloudRain,
+  AlertTriangle,
+  ArrowRight,
+  RefreshCw,
+  Wrench,
+  ShieldAlert,
+  ExternalLink,
+  Satellite,
+  Map,
+  Signal,
+} from "lucide-react";
+
+/* ── Types ─────────────────────────────────────────────────── */
 
 interface DashboardData {
   success: boolean;
@@ -58,11 +72,13 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  critical: "Crítico",
+  critical: "Critico",
   warning: "Degradado",
   ok: "Operacional",
   unknown: "Sem Dados",
 };
+
+/* ── Page ──────────────────────────────────────────────────── */
 
 export default function HomePage() {
   const [data, setData] = useState<DashboardData | null>(null);
@@ -73,9 +89,7 @@ export default function HomePage() {
     if (isRefresh) setRefreshing(true);
     try {
       const res = await fetch("/api/dashboard");
-      if (res.ok) {
-        setData(await res.json());
-      }
+      if (res.ok) setData(await res.json());
     } catch {
       // silent fail
     } finally {
@@ -93,13 +107,9 @@ export default function HomePage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="flex justify-center py-8">
-          <Skeleton className="h-36 w-36 rounded-full" />
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-32 rounded-lg" />
-          ))}
+        <Skeleton className="h-10 w-72" />
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-32 rounded-lg" />)}
         </div>
       </div>
     );
@@ -116,6 +126,11 @@ export default function HomePage() {
           <p className="mt-1 text-sm text-muted-foreground">
             Monitorização após a tempestade Kristin (28 Jan 2026)
           </p>
+          {data?.timestamp && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Última atualização: {new Date(data.timestamp).toLocaleString("pt-PT")}
+            </p>
+          )}
         </div>
         <button
           onClick={() => fetchData(true)}
@@ -131,17 +146,12 @@ export default function HomePage() {
       {(data?.populationWarnings?.length ?? 0) > 0 && (
         <div className="space-y-3">
           {data!.populationWarnings.map((w) => (
-            <div
-              key={w.id}
-              className="rounded-lg border border-red-500/30 bg-red-500/10 p-4"
-            >
+            <div key={w.id} className="rounded-lg border border-red-500/30 bg-red-500/10 p-4">
               <div className="flex items-start gap-3">
                 <ShieldAlert className="h-5 w-5 shrink-0 text-red-400 mt-0.5" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-semibold text-red-400">
-                      {w.title}
-                    </h3>
+                    <h3 className="text-sm font-semibold text-red-400">{w.title}</h3>
                     <Badge
                       variant="outline"
                       className="border-red-500/30 bg-red-500/20 text-red-400 text-[10px]"
@@ -149,9 +159,7 @@ export default function HomePage() {
                       ANEPC
                     </Badge>
                   </div>
-                  <p className="mt-1 text-sm text-foreground leading-relaxed">
-                    {w.summary}
-                  </p>
+                  <p className="mt-1 text-sm text-foreground leading-relaxed">{w.summary}</p>
                   {w.detailUrl && (
                     <a
                       href={w.detailUrl}
@@ -170,164 +178,102 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Dashboard header */}
-      <div className="flex flex-col items-center py-4">
-        {data?.timestamp && (
-          <p className="mt-3 text-xs text-muted-foreground">
-            Última atualização:{" "}
-            {new Date(data.timestamp).toLocaleString("pt-PT")}
-          </p>
-        )}
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Status grid — 2x2 mobile, 4-col desktop */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {/* Electricity */}
-        <Link href="/electricity">
-          <Card className="cursor-pointer transition-colors hover:bg-accent/50">
+        <Link href="/recovery">
+          <Card className="cursor-pointer transition-colors hover:bg-accent/50 h-full">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="flex items-center gap-2 text-sm font-medium">
                 <Zap className="h-4 w-4 text-amber-400" />
                 Eletricidade
               </CardTitle>
-              <Badge
-                variant="outline"
-                className={STATUS_COLORS[data?.summary.electricity.status ?? "unknown"]}
-              >
+              <Badge variant="outline" className={STATUS_COLORS[data?.summary.electricity.status ?? "unknown"]}>
                 {STATUS_LABELS[data?.summary.electricity.status ?? "unknown"]}
               </Badge>
             </CardHeader>
             <CardContent>
-              <div className="flex items-baseline justify-between">
-                <div>
-                  <p className="text-2xl font-bold">
-                    {data?.summary.electricity.totalOutages ?? "—"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Avarias ativas</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-lg font-semibold text-muted-foreground">
-                    {data?.summary.electricity.municipalitiesAffected ?? 0}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Concelhos</p>
-                </div>
-              </div>
-              <div className="mt-3 flex items-center justify-end text-xs text-primary">
-                Ver detalhes <ArrowRight className="ml-1 h-3 w-3" />
+              <p className="text-2xl font-bold">{data?.summary.electricity.totalOutages ?? "—"}</p>
+              <p className="text-xs text-muted-foreground">
+                Avarias · {data?.summary.electricity.municipalitiesAffected ?? 0} concelhos
+              </p>
+              <div className="mt-3 flex items-center text-xs text-primary">
+                Recuperação <ArrowRight className="ml-1 h-3 w-3" />
               </div>
             </CardContent>
           </Card>
         </Link>
 
         {/* Weather */}
-        <Link href="/weather">
-          <Card className="cursor-pointer transition-colors hover:bg-accent/50">
+        <Link href="/situation">
+          <Card className="cursor-pointer transition-colors hover:bg-accent/50 h-full">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="flex items-center gap-2 text-sm font-medium">
                 <CloudRain className="h-4 w-4 text-blue-400" />
                 Meteorologia
               </CardTitle>
-              <Badge
-                variant="outline"
-                className={STATUS_COLORS[data?.summary.weather.status ?? "unknown"]}
-              >
+              <Badge variant="outline" className={STATUS_COLORS[data?.summary.weather.status ?? "unknown"]}>
                 {STATUS_LABELS[data?.summary.weather.status ?? "unknown"]}
               </Badge>
             </CardHeader>
             <CardContent>
-              <div>
-                <p className="text-2xl font-bold">
-                  {data?.summary.weather.activeWarnings ?? "—"}
-                </p>
-                <p className="text-xs text-muted-foreground">Avisos ativos</p>
-              </div>
-              <div className="mt-3 flex items-center justify-end text-xs text-primary">
-                Ver detalhes <ArrowRight className="ml-1 h-3 w-3" />
+              <p className="text-2xl font-bold">{data?.summary.weather.activeWarnings ?? "—"}</p>
+              <p className="text-xs text-muted-foreground">Avisos ativos</p>
+              <div className="mt-3 flex items-center text-xs text-primary">
+                Situação <ArrowRight className="ml-1 h-3 w-3" />
               </div>
             </CardContent>
           </Card>
         </Link>
 
         {/* Occurrences */}
-        <Link href="/occurrences">
-          <Card className="cursor-pointer transition-colors hover:bg-accent/50">
+        <Link href="/situation">
+          <Card className="cursor-pointer transition-colors hover:bg-accent/50 h-full">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="flex items-center gap-2 text-sm font-medium">
                 <AlertTriangle className="h-4 w-4 text-orange-400" />
                 Ocorrências
               </CardTitle>
-              <Badge
-                variant="outline"
-                className={STATUS_COLORS[data?.summary.occurrences.status ?? "unknown"]}
-              >
+              <Badge variant="outline" className={STATUS_COLORS[data?.summary.occurrences.status ?? "unknown"]}>
                 {STATUS_LABELS[data?.summary.occurrences.status ?? "unknown"]}
               </Badge>
             </CardHeader>
             <CardContent>
-              <div className="flex items-baseline justify-between">
-                <div>
-                  <p className="text-2xl font-bold">
-                    {data?.summary.occurrences.activeCount ?? "—"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Ocorrências ativas
-                  </p>
-                </div>
-                {(data?.summary.scheduledWork.count ?? 0) > 0 && (
-                  <div className="flex items-center gap-1 text-right">
-                    <Wrench className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">
-                      {data?.summary.scheduledWork.count} obras
-                    </span>
-                  </div>
-                )}
-              </div>
-              <div className="mt-3 flex items-center justify-end text-xs text-primary">
-                Ver detalhes <ArrowRight className="ml-1 h-3 w-3" />
+              <p className="text-2xl font-bold">{data?.summary.occurrences.activeCount ?? "—"}</p>
+              <p className="text-xs text-muted-foreground">Ativas</p>
+              <div className="mt-3 flex items-center text-xs text-primary">
+                Situação <ArrowRight className="ml-1 h-3 w-3" />
               </div>
             </CardContent>
           </Card>
         </Link>
 
-        {/* Copernicus EMS */}
-        <Link href="/copernicus">
-          <Card className="cursor-pointer transition-colors hover:bg-accent/50">
+        {/* Copernicus */}
+        <Link href="/situation">
+          <Card className="cursor-pointer transition-colors hover:bg-accent/50 h-full">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="flex items-center gap-2 text-sm font-medium">
                 <Satellite className="h-4 w-4 text-purple-400" />
-                Copernicus EMS
+                Copernicus
               </CardTitle>
-              <Badge
-                variant="outline"
-                className={STATUS_COLORS[data?.summary.copernicus?.status ?? "unknown"]}
-              >
+              <Badge variant="outline" className={STATUS_COLORS[data?.summary.copernicus?.status ?? "unknown"]}>
                 {STATUS_LABELS[data?.summary.copernicus?.status ?? "unknown"]}
               </Badge>
             </CardHeader>
             <CardContent>
-              <div className="flex items-baseline justify-between">
-                <div>
-                  <p className="text-2xl font-bold">
-                    {data?.summary.copernicus?.products ?? "—"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Produtos</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-lg font-semibold text-muted-foreground">
-                    {data?.summary.copernicus?.aois ?? 0}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Áreas</p>
-                </div>
-              </div>
-              <div className="mt-3 flex items-center justify-end text-xs text-primary">
-                Ver detalhes <ArrowRight className="ml-1 h-3 w-3" />
+              <p className="text-2xl font-bold">{data?.summary.copernicus?.products ?? "—"}</p>
+              <p className="text-xs text-muted-foreground">
+                Produtos · {data?.summary.copernicus?.aois ?? 0} AOIs
+              </p>
+              <div className="mt-3 flex items-center text-xs text-primary">
+                Situação <ArrowRight className="ml-1 h-3 w-3" />
               </div>
             </CardContent>
           </Card>
         </Link>
       </div>
 
-      {/* Recent Warnings */}
+      {/* Quick alerts */}
       {(data?.recentWarnings?.length ?? 0) > 0 && (
         <div className="space-y-3">
           <h2 className="text-sm font-semibold text-foreground">
@@ -335,16 +281,48 @@ export default function HomePage() {
           </h2>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {data!.recentWarnings.map((w, i) => (
-              <WarningBadge
-                key={i}
-                level={w.level}
-                type={w.type}
-                text={w.text}
-              />
+              <WarningBadge key={i} level={w.level} type={w.type} text={w.text} />
             ))}
           </div>
         </div>
       )}
+
+      {/* Recovery summary */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        {(data?.summary.scheduledWork.count ?? 0) > 0 && (
+          <Card>
+            <CardContent className="flex items-center gap-3 py-4">
+              <Wrench className="h-5 w-5 text-cyan-400" />
+              <div>
+                <p className="text-sm font-medium">
+                  {data?.summary.scheduledWork.count} obras agendadas
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Interrupções planeadas pela E-REDES
+                </p>
+              </div>
+              <Link href="/recovery" className="ml-auto text-xs text-primary">
+                Ver <ArrowRight className="inline h-3 w-3" />
+              </Link>
+            </CardContent>
+          </Card>
+        )}
+
+        <Link href="/map">
+          <Card className="cursor-pointer transition-colors hover:bg-accent/50">
+            <CardContent className="flex items-center gap-3 py-4">
+              <Map className="h-5 w-5 text-primary" />
+              <div>
+                <p className="text-sm font-medium">Ver mapa completo</p>
+                <p className="text-xs text-muted-foreground">
+                  Avarias, antenas, ocorrências e reportes
+                </p>
+              </div>
+              <ArrowRight className="ml-auto h-4 w-4 text-primary" />
+            </CardContent>
+          </Card>
+        </Link>
+      </div>
     </div>
   );
 }

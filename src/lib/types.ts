@@ -236,6 +236,27 @@ export interface SubstationData {
   projection: { time: string; projectedLoad: number }[];
 }
 
+// Antenna data types
+export interface AntennaFeature {
+  lat: number;
+  lng: number;
+  operators: string[];
+  owner: string | null;
+  type: string;
+  technologies: string[];
+}
+
+export interface AntennaData {
+  success: boolean;
+  timestamp: string;
+  antennas: AntennaFeature[];
+  summary: {
+    total: number;
+    by_operator: { operator: string; count: number; color: string }[];
+    by_owner: { owner: string; count: number }[];
+  };
+}
+
 // Transformer station (PTD) types
 export interface TransformerMarker {
   lat: number;

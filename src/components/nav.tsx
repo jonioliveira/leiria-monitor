@@ -4,17 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { Zap, CloudRain, AlertTriangle, Home, Menu, X, Map, MessageSquarePlus, Satellite } from "lucide-react";
+import { Zap, AlertTriangle, Home, Menu, X, Map, CloudRain } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/", label: "Início", icon: Home },
   { href: "/map", label: "Mapa", icon: Map },
-  { href: "/report", label: "Reportar", icon: MessageSquarePlus },
-  { href: "/electricity", label: "Eletricidade", icon: Zap },
-  { href: "/weather", label: "Meteorologia", icon: CloudRain },
-  { href: "/occurrences", label: "Ocorrências", icon: AlertTriangle },
-
-  { href: "/copernicus", label: "Copernicus", icon: Satellite },
+  { href: "/recovery", label: "Recuperação", icon: Zap },
+  { href: "/situation", label: "Situação", icon: AlertTriangle },
 ] as const;
 
 export function Nav() {
@@ -29,8 +25,8 @@ export function Nav() {
           className="flex items-center gap-2 text-lg font-semibold text-foreground"
         >
           <CloudRain className="h-5 w-5 text-primary" />
-          <span className="hidden sm:inline">Kristin Recovery</span>
-          <span className="sm:hidden">KRT</span>
+          <span className="hidden sm:inline">Rede Sentinela</span>
+          <span className="sm:hidden">RS</span>
         </Link>
 
         {/* Desktop nav */}

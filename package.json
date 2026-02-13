@@ -1,7 +1,7 @@
 {
-  "name": "leiria-monitor",
+  "name": "rede-sentinela",
   "version": "2.0.0",
-  "description": "Kristin Recovery Tracker — Leiria district infrastructure monitoring",
+  "description": "Rede Sentinela — Leiria district infrastructure monitoring",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

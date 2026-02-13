@@ -7,6 +7,7 @@ import {
   eredesScheduledWork,
   procivOccurrences,
   procivWarnings,
+  antennas,
 } from "@/db/schema";
 import { verifyCronSecret } from "@/lib/cron-auth";
 import {
@@ -281,6 +282,91 @@ export async function GET(request: NextRequest) {
     results.procivWarnings = { success: true, detail: { ingested: scraped.length } };
   } catch (error: any) {
     results.procivWarnings = { success: false, error: error.message };
+  }
+
+  // 5) Antennas — fetch GeoJSON from GitHub and store in DB
+  try {
+    const GEOJSON_BASE = "https://raw.githubusercontent.com/avataranedotas/antenas_mobile/main";
+    const OPERATOR_FILES = [
+      { file: "meo.geojson", name: "MEO" },
+      { file: "nos.geojson", name: "NOS" },
+      { file: "vdf.geojson", name: "Vodafone" },
+      { file: "digi.geojson", name: "DIGI" },
+    ];
+    const BBOX = { latMin: 39.15, latMax: 40.05, lngMin: -9.45, lngMax: -8.1 };
+
+    const geoResults = await Promise.allSettled(
+      OPERATOR_FILES.map(async (op) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000);
+        const res = await fetch(`${GEOJSON_BASE}/${op.file}`, {
+          signal: controller.signal,
+          cache: "no-store",
+        });
+        clearTimeout(timeout);
+        if (!res.ok) return { features: [] as any[], operator: op.name };
+        const data = await res.json();
+        return { features: data.features ?? [], operator: op.name };
+      })
+    );
+
+    const grouped = new Map<string, {
+      lat: number; lng: number; operators: Set<string>;
+      owner: string | null; type: string; technologies: Set<string>;
+    }>();
+
+    for (const result of geoResults) {
+      if (result.status !== "fulfilled") continue;
+      const { features, operator: fileOp } = result.value;
+      for (const f of features) {
+        if (f.geometry?.type !== "Point") continue;
+        const [fLng, fLat] = f.geometry.coordinates;
+        if (fLat < BBOX.latMin || fLat > BBOX.latMax || fLng < BBOX.lngMin || fLng > BBOX.lngMax) continue;
+        const key = `${fLat.toFixed(6)},${fLng.toFixed(6)}`;
+        const props = f.properties ?? {};
+        const ops = props.operator
+          ? props.operator.split(/[;,/]/).map((s: string) =>
+              s.trim().replace(/\s*P$/i, "")
+                .replace(/^vodafone$/i, "Vodafone").replace(/^meo$/i, "MEO")
+                .replace(/^nos$/i, "NOS").replace(/^digi$/i, "DIGI")
+            ).filter(Boolean)
+          : [fileOp];
+        const techs: string[] = [];
+        if (props["communication:gsm"] === "yes" || props["frequency"]?.includes("900") || props["frequency"]?.includes("1800")) techs.push("2G");
+        if (props["communication:umts"] === "yes" || props["frequency"]?.includes("2100")) techs.push("3G");
+        if (props["communication:lte"] === "yes" || props["frequency"]?.includes("800") || props["frequency"]?.includes("2600")) techs.push("4G");
+        if (props["communication:nr"] === "yes" || props["frequency"]?.includes("3500") || props["frequency"]?.includes("700")) techs.push("5G");
+        if (techs.length === 0 && props["communication:mobile_phone"] === "yes") techs.push("Móvel");
+        const owner = props.owner ?? null;
+        const manMade = props.man_made ?? "other";
+        const type = manMade === "mast" ? "mast" : manMade === "tower" ? "tower" : "other";
+        if (grouped.has(key)) {
+          const existing = grouped.get(key)!;
+          ops.forEach((o: string) => existing.operators.add(o));
+          techs.forEach((t: string) => existing.technologies.add(t));
+          if (owner && !existing.owner) existing.owner = owner;
+        } else {
+          grouped.set(key, { lat: fLat, lng: fLng, operators: new Set(ops), owner, type, technologies: new Set(techs) });
+        }
+      }
+    }
+
+    const rows = Array.from(grouped.values()).map((g) => ({
+      lat: g.lat, lng: g.lng, operators: Array.from(g.operators),
+      owner: g.owner, type: g.type, technologies: Array.from(g.technologies),
+    }));
+
+    await db.delete(antennas).where(sql`1=1`);
+    if (rows.length > 0) {
+      const BATCH = 500;
+      for (let i = 0; i < rows.length; i += BATCH) {
+        await db.insert(antennas).values(rows.slice(i, i + BATCH));
+      }
+    }
+
+    results.antennas = { success: true, detail: { ingested: rows.length } };
+  } catch (error: any) {
+    results.antennas = { success: false, error: error.message };
   }
 
   return NextResponse.json({
