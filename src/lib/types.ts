@@ -221,6 +221,31 @@ export interface SupportItem {
   docs_required: string[];
 }
 
+// Substation load data types
+export interface SubstationEntry {
+  name: string;
+  latestLoad: number | null;
+}
+
+export interface SubstationData {
+  success: boolean;
+  timestamp: string;
+  substations: SubstationEntry[];
+  baseline: number;
+  actual: { time: string; totalLoad: number }[];
+  projection: { time: string; projectedLoad: number }[];
+}
+
+// Transformer station (PTD) types
+export interface TransformerMarker {
+  lat: number;
+  lng: number;
+  kva: number;
+  usage: string;
+  clients: number;
+  municipality: string;
+}
+
 export interface CalamityInfo {
   status: string;
   extended_until: string;

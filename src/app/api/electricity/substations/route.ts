@@ -1,0 +1,206 @@
+import { NextResponse } from "next/server";
+import { EREDES_BASE, EREDES_SUBSTATION_DATASET } from "@/lib/constants";
+
+export const revalidate = 300; // 5 minutes
+
+// Fetch all pages of an aggregation query
+async function fetchAllPages(
+  baseUrl: URL,
+  signal: AbortSignal,
+  pageSize = 100
+): Promise<Record<string, unknown>[]> {
+  // First page
+  const res = await fetch(baseUrl.toString(), {
+    signal,
+    next: { revalidate: 300 },
+  });
+  if (!res.ok) throw new Error(`E-REDES API responded with ${res.status}`);
+  const json = await res.json();
+  const total = json.total_count ?? 0;
+  const allResults = [...(json.results ?? [])];
+
+  // Remaining pages
+  for (let offset = pageSize; offset < total; offset += pageSize) {
+    const pageUrl = new URL(baseUrl.toString());
+    pageUrl.searchParams.set("offset", String(offset));
+    const pageRes = await fetch(pageUrl.toString(), {
+      signal,
+      next: { revalidate: 300 },
+    });
+    if (pageRes.ok) {
+      const pageJson = await pageRes.json();
+      allResults.push(...(pageJson.results ?? []));
+    }
+  }
+
+  return allResults;
+}
+
+export async function GET() {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20_000);
+
+  try {
+    // Fetch Jan 20 – Feb 3: covers baseline (20-25), storm (28), recovery (29+)
+    const hourlyUrl = new URL(
+      `${EREDES_BASE}/catalog/datasets/${EREDES_SUBSTATION_DATASET}/records`
+    );
+    hourlyUrl.searchParams.set("limit", "100");
+    hourlyUrl.searchParams.set(
+      "where",
+      "distrito='Leiria' AND datahora>='2026-01-20' AND datahora<='2026-02-03'"
+    );
+    hourlyUrl.searchParams.set(
+      "select",
+      "date_format(datahora,'yyyy-MM-dd HH') as hour,sum(energia) as total_energia"
+    );
+    hourlyUrl.searchParams.set(
+      "group_by",
+      "date_format(datahora,'yyyy-MM-dd HH')"
+    );
+    hourlyUrl.searchParams.set("order_by", "hour");
+
+    // Per-substation latest readings (last day available)
+    const latestUrl = new URL(
+      `${EREDES_BASE}/catalog/datasets/${EREDES_SUBSTATION_DATASET}/records`
+    );
+    latestUrl.searchParams.set("limit", "100");
+    latestUrl.searchParams.set(
+      "where",
+      "distrito='Leiria' AND datahora>='2026-02-02'"
+    );
+    latestUrl.searchParams.set("select", "subestacao,datahora,energia");
+    latestUrl.searchParams.set("order_by", "datahora DESC");
+
+    const [hourlyResults, latestRes] = await Promise.allSettled([
+      fetchAllPages(hourlyUrl, controller.signal),
+      fetch(latestUrl.toString(), {
+        signal: controller.signal,
+        next: { revalidate: 300 },
+      }),
+    ]);
+
+    // Process hourly data into three series: baseline, actual, projection
+    const hourlyRaw: { hour: string; energia: number }[] = [];
+    if (hourlyResults.status === "fulfilled") {
+      for (const r of hourlyResults.value) {
+        const hourKey =
+          (r["hour"] as string) ??
+          (r["date_format(datahora,'yyyy-MM-dd HH')"] as string) ??
+          "";
+        const energia = (r["total_energia"] as number) ?? 0;
+        hourlyRaw.push({ hour: hourKey, energia });
+      }
+    }
+    hourlyRaw.sort((a, b) => a.hour.localeCompare(b.hour));
+
+    // Baseline: Jan 20-25 average per hour-of-day (0-23)
+    const baselineByHour = new Map<number, number[]>();
+    for (const r of hourlyRaw) {
+      if (r.hour >= "2026-01-20" && r.hour < "2026-01-26") {
+        const hourOfDay = parseInt(r.hour.slice(-2), 10);
+        const arr = baselineByHour.get(hourOfDay) ?? [];
+        arr.push(r.energia / 1000); // kWh -> MWh approx
+        baselineByHour.set(hourOfDay, arr);
+      }
+    }
+    const baselineAvg = new Map<number, number>();
+    for (const [h, values] of baselineByHour) {
+      baselineAvg.set(
+        h,
+        Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 100) /
+          100
+      );
+    }
+
+    // Actual data: full period Jan 20 - Feb 3
+    const actual = hourlyRaw.map((r) => ({
+      time: r.hour,
+      totalLoad: Math.round((r.energia / 1000) * 100) / 100,
+    }));
+
+    // Get the last known load and date for projection
+    const lastActual = actual[actual.length - 1];
+    const lastLoad = lastActual?.totalLoad ?? 0;
+    const overallBaseline =
+      baselineAvg.size > 0
+        ? Math.round(
+            ([...baselineAvg.values()].reduce((a, b) => a + b, 0) /
+              baselineAvg.size) *
+              100
+          ) / 100
+        : 0;
+
+    // Projection: linear interpolation from last actual toward baseline over 7 days
+    const projection: { time: string; projectedLoad: number }[] = [];
+    if (lastActual && overallBaseline > 0) {
+      const gap = overallBaseline - lastLoad;
+      const projectionHours = 7 * 24; // 7 days
+      for (let i = 1; i <= projectionHours; i += 3) {
+        // Every 3 hours to keep data light
+        const progress = Math.min(i / projectionHours, 1);
+        // Ease-out curve for more natural recovery shape
+        const eased = 1 - Math.pow(1 - progress, 2);
+        const projLoad =
+          Math.round((lastLoad + gap * eased) * 100) / 100;
+
+        // Calculate the date string
+        const lastDate = new Date(lastActual.time.replace(" ", "T") + ":00:00Z");
+        const projDate = new Date(lastDate.getTime() + i * 3600_000);
+        const y = projDate.getUTCFullYear();
+        const mo = String(projDate.getUTCMonth() + 1).padStart(2, "0");
+        const d = String(projDate.getUTCDate()).padStart(2, "0");
+        const h = String(projDate.getUTCHours()).padStart(2, "0");
+        projection.push({ time: `${y}-${mo}-${d} ${h}`, projectedLoad: projLoad });
+      }
+    }
+
+    // Per-substation latest load
+    let substations: { name: string; latestLoad: number | null }[] = [];
+    if (latestRes.status === "fulfilled" && latestRes.value.ok) {
+      const json = await latestRes.value.json();
+      const latestBySubstation = new Map<string, number | null>();
+      for (const r of json.results ?? []) {
+        const name = r.subestacao as string;
+        if (!latestBySubstation.has(name)) {
+          latestBySubstation.set(
+            name,
+            r.energia != null
+              ? Math.round(((r.energia as number) / 1000) * 100) / 100
+              : null
+          );
+        }
+      }
+      substations = Array.from(latestBySubstation.entries()).map(
+        ([name, latestLoad]) => ({ name, latestLoad })
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      source: "E-REDES — Diagrama de Carga de Subestações",
+      substations,
+      baseline: overallBaseline,
+      actual,
+      projection,
+    });
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json(
+      {
+        success: false,
+        timestamp: new Date().toISOString(),
+        error: message,
+        substations: [],
+        baseline: 0,
+        actual: [],
+        projection: [],
+      },
+      { status: 500 }
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
+}

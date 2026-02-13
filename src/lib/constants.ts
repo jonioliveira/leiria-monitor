@@ -16,14 +16,39 @@ export const LEIRIA_MUNICIPALITIES = [
   "Peniche",
 ] as const;
 
-// Uppercase versions for ANEPC filtering
-export const LEIRIA_MUNICIPALITIES_UPPER = LEIRIA_MUNICIPALITIES.map((m) =>
-  m.toUpperCase()
-);
 
 export const EREDES_BASE = "https://e-redes.opendatasoft.com/api/explore/v2.1";
 export const EREDES_OUTAGES_DATASET = "outages-auxiliar";
 export const EREDES_SCHEDULED_DATASET = "network-scheduling-work";
+export const EREDES_SUBSTATION_DATASET = "diagrama_carga_subestacao_08_a_10";
+export const EREDES_PTD_DATASET = "postos-transformacao-distribuicao";
+
+// Approximate coordinates for the 22 E-REDES substations in Leiria district.
+// Keys match the uppercase names returned by the API (with accents).
+export const SUBSTATION_COORDS: Record<string, { lat: number; lng: number }> = {
+  "ALCOBAÇA": { lat: 39.5481, lng: -8.9773 },
+  "ALVAIÁZERE": { lat: 39.8265, lng: -8.3820 },
+  "ANDRINOS": { lat: 39.8780, lng: -8.6050 },
+  "ATOUGUIA": { lat: 39.3410, lng: -9.3250 },
+  "AZÓIA": { lat: 39.3060, lng: -9.2070 },
+  "CALDAS DA RAINHA": { lat: 39.4031, lng: -9.1365 },
+  "CASAL DA AREIA": { lat: 39.7200, lng: -8.8500 },
+  "CASAL DA LEBRE": { lat: 39.6800, lng: -8.9100 },
+  "CELA": { lat: 39.5870, lng: -8.9650 },
+  "LOURIÇAL": { lat: 39.9200, lng: -8.6900 },
+  "MARINHA GRANDE": { lat: 39.7481, lng: -8.9320 },
+  "ORTIGOSA": { lat: 39.7800, lng: -8.7400 },
+  "PARCEIROS": { lat: 39.7600, lng: -8.7900 },
+  "PEDRÓGÃO": { lat: 39.9194, lng: -8.1430 },
+  "PINHEIROS": { lat: 39.4450, lng: -9.0650 },
+  "POMBAL": { lat: 39.9153, lng: -8.6285 },
+  "PONTÃO": { lat: 39.6400, lng: -8.9400 },
+  "RANHA": { lat: 39.6300, lng: -8.8600 },
+  "SANCHEIRA": { lat: 39.4700, lng: -9.0800 },
+  "SANTO ONOFRE": { lat: 39.4100, lng: -9.1400 },
+  "SÃO JORGE": { lat: 39.7100, lng: -8.7600 },
+  "TURQUEL": { lat: 39.4950, lng: -8.9700 },
+};
 
 export const IPMA_WARNINGS_URL =
   "https://api.ipma.pt/open-data/forecast/warnings/warnings_www.json";
@@ -32,8 +57,8 @@ export const IPMA_FORECAST_URL =
 export const IPMA_LEIRIA_CITY_ID = 1100900;
 export const IPMA_LEIRIA_AREA_ID = "LRA";
 
-export const ANEPC_FEATURE_SERVER =
-  "https://services8.arcgis.com/NIGDS8MzSPVhBAWC/arcgis/rest/services/Ocorrencias_ProCiv_AGOL/FeatureServer/8/query";
+export const OCORRENCIAS360_API =
+  "https://ocorrencias360-production.up.railway.app/api/historical/all";
 
 export const CRON_INTERVALS = {
   ipma: "*/15 * * * *",
