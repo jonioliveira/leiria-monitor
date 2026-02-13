@@ -7,7 +7,6 @@ import {
   eredesScheduledWork,
   procivOccurrences,
   procivWarnings,
-  recoverySnapshots,
 } from "@/db/schema";
 import { verifyCronSecret } from "@/lib/cron-auth";
 import {
@@ -21,16 +20,8 @@ import {
   EREDES_OUTAGES_DATASET,
   EREDES_SCHEDULED_DATASET,
   LEIRIA_MUNICIPALITIES,
-  LEIRIA_MUNICIPALITIES_UPPER,
-  ANEPC_FEATURE_SERVER,
+  OCORRENCIAS360_API,
 } from "@/lib/constants";
-import {
-  calculateRecoveryScore,
-  deriveElectricityScore,
-  deriveOccurrencesScore,
-  deriveWeatherScore,
-  deriveScheduledWorkBonus,
-} from "@/lib/recovery-score";
 import { eq, sql } from "drizzle-orm";
 
 export const maxDuration = 60;
@@ -158,30 +149,35 @@ export async function GET(request: NextRequest) {
     results.eredes = { success: false, error: error.message };
   }
 
-  // 3) ProCiv — occurrences
+  // 3) ProCiv — occurrences (via ocorrencias360)
   try {
-    const concelhoFilter = LEIRIA_MUNICIPALITIES_UPPER.map((m) => `Concelho='${m}'`).join(" OR ");
-    const url = new URL(ANEPC_FEATURE_SERVER);
-    url.searchParams.set("where", concelhoFilter);
-    url.searchParams.set("outFields", "*");
-    url.searchParams.set("outSR", "4326");
-    url.searchParams.set("f", "json");
-    url.searchParams.set("resultRecordCount", "200");
+    const leiriaSet = new Set(LEIRIA_MUNICIPALITIES.map((m) => m));
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-    const res = await fetch(url.toString(), { signal: controller.signal, cache: "no-store" });
+    const timeout = setTimeout(() => controller.abort(), 45000);
+    const res = await fetch(OCORRENCIAS360_API, {
+      signal: controller.signal,
+      cache: "no-store",
+      headers: { Accept: "application/json" },
+    });
     clearTimeout(timeout);
 
     let ingested = 0;
     if (res.ok) {
       const data = await res.json();
-      const features = data.features ?? [];
+      const hourlyData = data.dataByHour ?? {};
+      const latestHour = Object.keys(hourlyData).sort().pop();
+      if (!latestHour) throw new Error("No hourly data available");
+
+      const allFeatures: any[] = hourlyData[latestHour] ?? [];
+      const features = allFeatures.filter(
+        (f: any) => leiriaSet.has(f.properties?.Concelho)
+      );
 
       for (const feature of features) {
-        const attrs = feature.attributes ?? {};
-        const geom = feature.geometry ?? {};
-        const externalId = String(attrs.OBJECTID ?? attrs.FID ?? "");
+        const props = feature.properties ?? {};
+        const coords = feature.geometry?.coordinates ?? [];
+        const externalId = String(props.ID_oc ?? "");
         if (!externalId) continue;
 
         const existing = await db
@@ -192,15 +188,15 @@ export async function GET(request: NextRequest) {
 
         const record = {
           externalId,
-          nature: attrs.Natureza ?? attrs.NaturezaEvento ?? null,
-          state: attrs.EstadoOcorrencia ?? attrs.Estado ?? null,
-          municipality: attrs.Concelho ?? null,
-          lat: geom.y ?? null,
-          lng: geom.x ?? null,
-          startTime: attrs.DataOcorrencia ? new Date(attrs.DataOcorrencia) : null,
-          numMeans: attrs.NumeroMeiosTerrestresEnvolvidos ?? attrs.NumMeios ?? null,
-          numOperatives: attrs.NumeroOperacionaisEnvolvidos ?? attrs.NumOperacionais ?? null,
-          numAerialMeans: attrs.NumeroMeiosAereosEnvolvidos ?? null,
+          nature: props.Natureza ?? null,
+          state: props.EstadoOcorrencia ?? null,
+          municipality: props.Concelho ?? null,
+          lat: coords[1] ?? null,
+          lng: coords[0] ?? null,
+          startTime: props.DataInicioOcorrencia ? new Date(props.DataInicioOcorrencia) : null,
+          numMeans: props.MeiosTerrestres ?? null,
+          numOperatives: props.Operacionais ?? null,
+          numAerialMeans: props.MeiosAereos ?? null,
           fetchedAt: new Date(),
         };
 
@@ -214,11 +210,14 @@ export async function GET(request: NextRequest) {
 
       if (features.length > 0) {
         const currentIds = features
-          .map((f: any) => String(f.attributes?.OBJECTID ?? f.attributes?.FID ?? ""))
+          .map((f: any) => String(f.properties?.ID_oc ?? ""))
           .filter(Boolean);
         await db
           .delete(procivOccurrences)
           .where(sql`external_id NOT IN (${sql.join(currentIds.map((id: string) => sql`${id}`), sql`, `)})`);
+      } else {
+        // No active occurrences in Leiria — clear the table
+        await db.delete(procivOccurrences).where(sql`1=1`);
       }
     }
 
@@ -282,67 +281,6 @@ export async function GET(request: NextRequest) {
     results.procivWarnings = { success: true, detail: { ingested: scraped.length } };
   } catch (error: any) {
     results.procivWarnings = { success: false, error: error.message };
-  }
-
-  // 5) Recovery snapshot
-  try {
-    const outages = await db.select().from(eredesOutages);
-    const warnings = await db.select().from(ipmaWarnings);
-    const occurrences = await db.select().from(procivOccurrences);
-    const scheduledWork = await db.select().from(eredesScheduledWork);
-
-    const totalOutages = outages.reduce((sum, o) => sum + o.outageCount, 0);
-    const activeOccurrences = occurrences.length;
-
-    const electricityScore = deriveElectricityScore(totalOutages);
-    const weatherScore = deriveWeatherScore(warnings.map((w) => ({ level: w.level })));
-    const occurrencesScore = deriveOccurrencesScore(activeOccurrences);
-    const scheduledWorkBonus = deriveScheduledWorkBonus(scheduledWork.length);
-
-    const overallScore = calculateRecoveryScore({
-      electricityScore,
-      occurrencesScore,
-      weatherScore,
-      scheduledWorkBonus,
-    });
-
-    const today = new Date().toISOString().split("T")[0];
-    const metadata = {
-      totalOutages,
-      activeOccurrences,
-      activeWarnings: warnings.length,
-      scheduledWorkCount: scheduledWork.length,
-      electricityScore,
-      weatherScore,
-      occurrencesScore,
-      scheduledWorkBonus,
-    };
-
-    const existing = await db
-      .select({ id: recoverySnapshots.id })
-      .from(recoverySnapshots)
-      .where(eq(recoverySnapshots.date, today))
-      .limit(1);
-
-    if (existing.length > 0) {
-      await db
-        .update(recoverySnapshots)
-        .set({ electricityScore, weatherScore, occurrencesScore, overallScore, metadata })
-        .where(eq(recoverySnapshots.date, today));
-    } else {
-      await db.insert(recoverySnapshots).values({
-        date: today,
-        electricityScore,
-        weatherScore,
-        occurrencesScore,
-        overallScore,
-        metadata,
-      });
-    }
-
-    results.snapshot = { success: true, detail: { score: overallScore } };
-  } catch (error: any) {
-    results.snapshot = { success: false, error: error.message };
   }
 
   return NextResponse.json({
