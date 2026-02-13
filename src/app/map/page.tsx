@@ -249,7 +249,7 @@ export default function MapaPage() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col bg-background">
       {/* View toggle bar */}
       <div className="flex items-center justify-between border-b border-border bg-background px-4 py-2">
         <div className="flex gap-1">

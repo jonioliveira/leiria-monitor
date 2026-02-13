@@ -181,13 +181,13 @@ export default function HomePage() {
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {/* Electricity */}
         <Link href="/recovery">
-          <Card className="cursor-pointer transition-colors hover:bg-accent/50 h-full">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <Card className="cursor-pointer transition-colors hover:bg-accent/50 h-full overflow-hidden">
+            <CardHeader className="flex flex-col gap-1 pb-2 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
               <CardTitle className="flex items-center gap-2 text-sm font-medium">
-                <Zap className="h-4 w-4 text-amber-400" />
+                <Zap className="h-4 w-4 shrink-0 text-amber-400" />
                 Eletricidade
               </CardTitle>
-              <Badge variant="outline" className={STATUS_COLORS[data?.summary.electricity.status ?? "unknown"]}>
+              <Badge variant="outline" className={`w-fit ${STATUS_COLORS[data?.summary.electricity.status ?? "unknown"]}`}>
                 {STATUS_LABELS[data?.summary.electricity.status ?? "unknown"]}
               </Badge>
             </CardHeader>
@@ -205,13 +205,13 @@ export default function HomePage() {
 
         {/* Weather */}
         <Link href="/situation">
-          <Card className="cursor-pointer transition-colors hover:bg-accent/50 h-full">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <Card className="cursor-pointer transition-colors hover:bg-accent/50 h-full overflow-hidden">
+            <CardHeader className="flex flex-col gap-1 pb-2 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
               <CardTitle className="flex items-center gap-2 text-sm font-medium">
-                <CloudRain className="h-4 w-4 text-blue-400" />
+                <CloudRain className="h-4 w-4 shrink-0 text-blue-400" />
                 Meteorologia
               </CardTitle>
-              <Badge variant="outline" className={STATUS_COLORS[data?.summary.weather.status ?? "unknown"]}>
+              <Badge variant="outline" className={`w-fit ${STATUS_COLORS[data?.summary.weather.status ?? "unknown"]}`}>
                 {STATUS_LABELS[data?.summary.weather.status ?? "unknown"]}
               </Badge>
             </CardHeader>
@@ -227,13 +227,13 @@ export default function HomePage() {
 
         {/* Occurrences */}
         <Link href="/situation">
-          <Card className="cursor-pointer transition-colors hover:bg-accent/50 h-full">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <Card className="cursor-pointer transition-colors hover:bg-accent/50 h-full overflow-hidden">
+            <CardHeader className="flex flex-col gap-1 pb-2 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
               <CardTitle className="flex items-center gap-2 text-sm font-medium">
-                <AlertTriangle className="h-4 w-4 text-orange-400" />
+                <AlertTriangle className="h-4 w-4 shrink-0 text-orange-400" />
                 Ocorrências
               </CardTitle>
-              <Badge variant="outline" className={STATUS_COLORS[data?.summary.occurrences.status ?? "unknown"]}>
+              <Badge variant="outline" className={`w-fit ${STATUS_COLORS[data?.summary.occurrences.status ?? "unknown"]}`}>
                 {STATUS_LABELS[data?.summary.occurrences.status ?? "unknown"]}
               </Badge>
             </CardHeader>
@@ -249,13 +249,13 @@ export default function HomePage() {
 
         {/* Copernicus */}
         <Link href="/situation">
-          <Card className="cursor-pointer transition-colors hover:bg-accent/50 h-full">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <Card className="cursor-pointer transition-colors hover:bg-accent/50 h-full overflow-hidden">
+            <CardHeader className="flex flex-col gap-1 pb-2 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
               <CardTitle className="flex items-center gap-2 text-sm font-medium">
-                <Satellite className="h-4 w-4 text-purple-400" />
+                <Satellite className="h-4 w-4 shrink-0 text-purple-400" />
                 Copernicus
               </CardTitle>
-              <Badge variant="outline" className={STATUS_COLORS[data?.summary.copernicus?.status ?? "unknown"]}>
+              <Badge variant="outline" className={`w-fit ${STATUS_COLORS[data?.summary.copernicus?.status ?? "unknown"]}`}>
                 {STATUS_LABELS[data?.summary.copernicus?.status ?? "unknown"]}
               </Badge>
             </CardHeader>
