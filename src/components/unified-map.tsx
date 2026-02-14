@@ -79,6 +79,12 @@ export interface Occurrence {
   numOperatives: number | null;
 }
 
+export interface PoleMarker {
+  id: number;
+  lat: number;
+  lng: number;
+}
+
 export interface InfraReportContext {
   lat: number;
   lng: number;
@@ -96,6 +102,7 @@ export interface UnifiedMapProps {
     antennas?: AntennaFeature[];
     occurrences?: Occurrence[];
     reports?: Report[];
+    poles?: PoleMarker[];
   };
   visibleLayers: Set<string>;
   visibleOperators?: Set<string>;
@@ -103,6 +110,7 @@ export interface UnifiedMapProps {
   onReportInfra?: (ctx: InfraReportContext) => void;
   onUpvote?: (id: number) => void;
   onResolve?: (id: number) => void;
+  onBoundsChange?: (bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number }) => void;
   clickedPosition?: { lat: number; lng: number } | null;
 }
 
@@ -247,6 +255,47 @@ function ClickHandler({ onClick }: { onClick: (lat: number, lng: number) => void
   return null;
 }
 
+/* ── Bounds tracker ────────────────────────────────────────── */
+
+function BoundsTracker({
+  onChange,
+}: {
+  onChange: (bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number }) => void;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    function emitBounds() {
+      const b = map.getBounds();
+      onChange({
+        minLat: b.getSouth(),
+        maxLat: b.getNorth(),
+        minLng: b.getWest(),
+        maxLng: b.getEast(),
+      });
+    }
+    // Emit initial bounds
+    emitBounds();
+    map.on("moveend", emitBounds);
+    map.on("zoomend", emitBounds);
+    return () => {
+      map.off("moveend", emitBounds);
+      map.off("zoomend", emitBounds);
+    };
+  }, [map, onChange]);
+
+  return null;
+}
+
+/* ── Pole icon helpers ─────────────────────────────────────── */
+
+const poleIcon = L.divIcon({
+  html: `<div style="width:38px;height:38px;display:flex;align-items:center;justify-content:center"><svg width="26" height="26" viewBox="0 0 24 24" fill="none"><rect x="10.5" y="2" width="3" height="20" rx="1" fill="#f59e0b" stroke="white" stroke-width="1.2"/><rect x="4" y="7" width="16" height="2.5" rx="1" fill="#f59e0b" stroke="white" stroke-width="1"/><circle cx="12" cy="5" r="2" fill="#fbbf24" stroke="white" stroke-width="1"/></svg></div>`,
+  className: "",
+  iconSize: [38, 38],
+  iconAnchor: [19, 19],
+});
+
 /* ── Legend ─────────────────────────────────────────────────── */
 
 function Legend({ visibleLayers }: { visibleLayers: Set<string> }) {
@@ -314,6 +363,11 @@ function Legend({ visibleLayers }: { visibleLayers: Set<string> }) {
           html += `<span style="color:#06b6d4">&#9650;</span> Sem água<br/>`;
         }
 
+        if (visibleLayers.has("poles")) {
+          html += "<strong style='color:#f59e0b'>Postes BT</strong><br/>";
+          html += `<span style="color:#f59e0b">&#9702;</span> Poste BT<br/>`;
+        }
+
         div.innerHTML = html;
       }
 
@@ -342,6 +396,7 @@ export function UnifiedMap({
   onReportInfra,
   onUpvote,
   onResolve,
+  onBoundsChange,
   clickedPosition,
 }: UnifiedMapProps) {
   const outages = layers.outages ?? [];
@@ -350,6 +405,7 @@ export function UnifiedMap({
   const antennas = layers.antennas ?? [];
   const occurrences = layers.occurrences ?? [];
   const reports = layers.reports ?? [];
+  const poles = layers.poles ?? [];
 
   const filteredAntennas = visibleOperators
     ? antennas.filter((a) => a.operators.some((op) => visibleOperators.has(op)))
@@ -380,6 +436,7 @@ export function UnifiedMap({
       />
       <Legend visibleLayers={visibleLayers} />
       {onMapClick && <ClickHandler onClick={onMapClick} />}
+      {onBoundsChange && <BoundsTracker onChange={onBoundsChange} />}
 
       {/* ── Clicked position pin ──────────────────────────── */}
       {clickedPosition && (
@@ -837,6 +894,71 @@ export function UnifiedMap({
             </CircleMarker>
           );
         })}
+      {/* ── Poles (BT) layer — clustered, zoom gated ─────── */}
+      {visibleLayers.has("poles") && poles.length > 0 && (
+        <MarkerClusterGroup
+          chunkedLoading
+          maxClusterRadius={60}
+          disableClusteringAtZoom={18}
+          spiderfyOnMaxZoom
+          showCoverageOnHover={false}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          iconCreateFunction={(cluster: any) => {
+            const count = cluster.getChildCount();
+            let dim = 28;
+            if (count > 500) dim = 44;
+            else if (count > 100) dim = 36;
+            else if (count > 30) dim = 32;
+            return L.divIcon({
+              html: `<div style="background:rgba(245,158,11,0.7);color:white;border-radius:50%;width:${dim}px;height:${dim}px;display:flex;align-items:center;justify-content:center;font-size:${dim > 36 ? 12 : 10}px;font-weight:600;border:2px solid rgba(255,255,255,0.8);box-shadow:0 2px 6px rgba(0,0,0,0.3)">${count >= 1000 ? `${(count / 1000).toFixed(1)}k` : count}</div>`,
+              className: "",
+              iconSize: L.point(dim, dim),
+            });
+          }}
+        >
+          {poles.map((p) => (
+            <Marker key={`pole-${p.id}`} position={[p.lat, p.lng]} icon={poleIcon}>
+              <Popup>
+                <div style={{ fontFamily: "sans-serif", fontSize: "13px", lineHeight: "1.6", minWidth: 160 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: "0 0 4px" }}>
+                    <p style={{ fontWeight: 700, fontSize: "14px", margin: 0, color: "#f59e0b" }}>
+                      Poste BT
+                    </p>
+                    <span style={{ fontSize: "10px", color: "#94a3b8", fontFamily: "monospace" }}>
+                      POL-{p.id}
+                    </span>
+                  </div>
+                  <p style={{ margin: "4px 0 0", fontSize: "10px", color: "#94a3b8", fontFamily: "monospace" }}>
+                    {p.lat.toFixed(5)}, {p.lng.toFixed(5)}
+                  </p>
+                  {onReportInfra && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onReportInfra({
+                          lat: p.lat,
+                          lng: p.lng,
+                          label: "Poste de Baixa Tensão",
+                          type: "electricity",
+                          operator: null,
+                          details: [`ID: POL-${p.id}`],
+                        });
+                      }}
+                      style={{
+                        marginTop: 10, padding: "5px 12px", fontSize: "12px", borderRadius: 6,
+                        border: "1px solid #dc2626", background: "#fef2f2", color: "#dc2626",
+                        cursor: "pointer", fontWeight: 600, width: "100%",
+                      }}
+                    >
+                      Reportar problema
+                    </button>
+                  )}
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+        </MarkerClusterGroup>
+      )}
     </MapContainer>
   );
 }

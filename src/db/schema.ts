@@ -104,6 +104,13 @@ export const antennas = pgTable("antennas", {
   fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const btPoles = pgTable("bt_poles", {
+  id: serial("id").primaryKey(),
+  lat: real("lat").notNull(),
+  lng: real("lng").notNull(),
+  fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const userReports = pgTable("user_reports", {
   id: serial("id").primaryKey(),
   type: text("type").notNull(), // "electricity" | "telecom_mobile" | "telecom_fixed" | "water"

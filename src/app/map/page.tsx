@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import dynamic from "next/dynamic";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ReportPanel } from "@/components/report-panel";
@@ -14,6 +14,7 @@ import type {
   AntennaFeature,
   Report,
   InfraReportContext,
+  PoleMarker,
 } from "@/components/unified-map";
 
 function timeAgo(dateStr: string): string {
@@ -30,11 +31,12 @@ const UnifiedMap = dynamic(
   { ssr: false, loading: () => <Skeleton className="h-full w-full" /> }
 );
 
-const ALL_LAYERS = ["transformers", "antennas", "reports"] as const;
+const ALL_LAYERS = ["transformers", "antennas", "reports", "poles"] as const;
 const LAYER_LABELS: Record<string, { label: string; icon: typeof Radio }> = {
   transformers: { label: "PTDs", icon: Activity },
   antennas: { label: "Antenas", icon: Radio },
   reports: { label: "Reportes", icon: MessageSquarePlus },
+  poles: { label: "Postes BT", icon: Zap },
 };
 
 const ALL_OPERATORS = ["MEO", "NOS", "Vodafone", "DIGI"];
@@ -77,8 +79,12 @@ export default function MapaPage() {
   const [transformers, setTransformers] = useState<TransformerMarker[]>([]);
   const [antennas, setAntennas] = useState<AntennaFeature[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
+  const [poles, setPoles] = useState<PoleMarker[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<ViewMode>("map");
+  const [mapBounds, setMapBounds] = useState<{ minLat: number; maxLat: number; minLng: number; maxLng: number } | null>(null);
+  const [mapZoom, setMapZoom] = useState(10);
+  const poleFetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [visibleLayers, setVisibleLayers] = useState<Set<string>>(
     new Set(["transformers", "antennas", "reports"])
@@ -145,6 +151,43 @@ export default function MapaPage() {
       }
     } catch { /* silent */ }
   }, []);
+
+  const handleBoundsChange = useCallback((bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number }) => {
+    setMapBounds(bounds);
+    // Estimate zoom from lat span — rough but sufficient
+    const latSpan = bounds.maxLat - bounds.minLat;
+    const estimatedZoom = latSpan > 0 ? Math.round(Math.log2(180 / latSpan)) : 10;
+    setMapZoom(estimatedZoom);
+  }, []);
+
+  // Debounced pole fetching when layer is visible and zoom >= 14
+  useEffect(() => {
+    if (!visibleLayers.has("poles") || !mapBounds || mapZoom < 14) {
+      setPoles([]);
+      return;
+    }
+
+    if (poleFetchTimer.current) clearTimeout(poleFetchTimer.current);
+    poleFetchTimer.current = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({
+          minLat: String(mapBounds.minLat),
+          maxLat: String(mapBounds.maxLat),
+          minLng: String(mapBounds.minLng),
+          maxLng: String(mapBounds.maxLng),
+        });
+        const res = await fetch(`/api/electricity/poles?${params}`);
+        if (res.ok) {
+          const data = await res.json();
+          setPoles(data.poles ?? []);
+        }
+      } catch { /* silent */ }
+    }, 500);
+
+    return () => {
+      if (poleFetchTimer.current) clearTimeout(poleFetchTimer.current);
+    };
+  }, [visibleLayers, mapBounds, mapZoom]);
 
   useEffect(() => {
     async function load() {
@@ -299,15 +342,23 @@ export default function MapaPage() {
       {view === "map" && (
         <div className="relative flex-1">
           <UnifiedMap
-            layers={{ transformers, antennas, reports }}
+            layers={{ transformers, antennas, reports, poles }}
             visibleLayers={visibleLayers}
             visibleOperators={visibleOperators}
             onMapClick={handleMapClick}
             onReportInfra={handleReportInfra}
             onUpvote={handleUpvote}
             onResolve={handleResolve}
+            onBoundsChange={handleBoundsChange}
             clickedPosition={reportLat != null && reportLng != null ? { lat: reportLat, lng: reportLng } : null}
           />
+
+          {/* Zoom gate message for poles layer */}
+          {visibleLayers.has("poles") && mapZoom < 14 && (
+            <div className="absolute bottom-20 left-1/2 z-[1000] -translate-x-1/2 rounded-lg bg-background/90 border border-border px-4 py-2 text-sm text-muted-foreground shadow-md backdrop-blur-sm">
+              Aproxime o mapa para ver os postes BT
+            </div>
+          )}
 
           {/* Layer toggle bar — top-left */}
           <div className="absolute left-3 top-3 z-[1000] flex flex-wrap gap-1.5">

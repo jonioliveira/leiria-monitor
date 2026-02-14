@@ -22,6 +22,9 @@ export const EREDES_OUTAGES_DATASET = "outages-auxiliar";
 export const EREDES_SCHEDULED_DATASET = "network-scheduling-work";
 export const EREDES_SUBSTATION_DATASET = "diagrama_carga_subestacao_08_a_10";
 export const EREDES_PTD_DATASET = "postos-transformacao-distribuicao";
+export const EREDES_POLES_DATASET = "apoios-baixa-tensao";
+export const LEIRIA_CENTER = { lat: 39.65, lng: -8.75 };
+export const LEIRIA_RADIUS_KM = 50;
 
 // Approximate coordinates for the 22 E-REDES substations in Leiria district.
 // Keys match the uppercase names returned by the API (with accents).
