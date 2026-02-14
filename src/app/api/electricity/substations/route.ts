@@ -72,12 +72,32 @@ export async function GET() {
     latestUrl.searchParams.set("select", "subestacao,datahora,energia");
     latestUrl.searchParams.set("order_by", "datahora DESC");
 
-    const [hourlyResults, latestRes] = await Promise.allSettled([
+    // Per-substation hourly data for individual charts
+    const perSubHourlyUrl = new URL(
+      `${EREDES_BASE}/catalog/datasets/${EREDES_SUBSTATION_DATASET}/records`
+    );
+    perSubHourlyUrl.searchParams.set("limit", "100");
+    perSubHourlyUrl.searchParams.set(
+      "where",
+      "distrito='Leiria' AND datahora>='2026-01-20' AND datahora<='2026-02-03'"
+    );
+    perSubHourlyUrl.searchParams.set(
+      "select",
+      "subestacao,date_format(datahora,'yyyy-MM-dd HH') as hour,sum(energia) as total_energia"
+    );
+    perSubHourlyUrl.searchParams.set(
+      "group_by",
+      "subestacao,date_format(datahora,'yyyy-MM-dd HH')"
+    );
+    perSubHourlyUrl.searchParams.set("order_by", "subestacao,hour");
+
+    const [hourlyResults, latestRes, perSubResults] = await Promise.allSettled([
       fetchAllPages(hourlyUrl, controller.signal),
       fetch(latestUrl.toString(), {
         signal: controller.signal,
         next: { revalidate: 300 },
       }),
+      fetchAllPages(perSubHourlyUrl, controller.signal),
     ]);
 
     // Process hourly data into three series: baseline, actual, projection
@@ -176,6 +196,61 @@ export async function GET() {
       );
     }
 
+    // Process per-substation hourly data
+    const perSubstation: Record<
+      string,
+      { actual: { time: string; totalLoad: number }[]; baseline: number }
+    > = {};
+    if (perSubResults.status === "fulfilled") {
+      // Group raw records by substation
+      const byStation = new Map<string, { hour: string; energia: number }[]>();
+      for (const r of perSubResults.value) {
+        const name = (r["subestacao"] as string) ?? "";
+        const hourKey =
+          (r["hour"] as string) ??
+          (r["date_format(datahora,'yyyy-MM-dd HH')"] as string) ??
+          "";
+        const energia = (r["total_energia"] as number) ?? 0;
+        if (!name || !hourKey) continue;
+        const arr = byStation.get(name) ?? [];
+        arr.push({ hour: hourKey, energia });
+        byStation.set(name, arr);
+      }
+
+      for (const [name, rows] of byStation) {
+        rows.sort((a, b) => a.hour.localeCompare(b.hour));
+
+        // Per-substation baseline: Jan 20-25 average
+        const blByHour = new Map<number, number[]>();
+        for (const r of rows) {
+          if (r.hour >= "2026-01-20" && r.hour < "2026-01-26") {
+            const hod = parseInt(r.hour.slice(-2), 10);
+            const arr = blByHour.get(hod) ?? [];
+            arr.push(r.energia / 1000);
+            blByHour.set(hod, arr);
+          }
+        }
+        let bl = 0;
+        if (blByHour.size > 0) {
+          const avgValues = [...blByHour.values()].map(
+            (vals) => vals.reduce((a, b) => a + b, 0) / vals.length
+          );
+          bl =
+            Math.round(
+              (avgValues.reduce((a, b) => a + b, 0) / avgValues.length) * 100
+            ) / 100;
+        }
+
+        perSubstation[name] = {
+          actual: rows.map((r) => ({
+            time: r.hour,
+            totalLoad: Math.round((r.energia / 1000) * 100) / 100,
+          })),
+          baseline: bl,
+        };
+      }
+    }
+
     return NextResponse.json({
       success: true,
       timestamp: new Date().toISOString(),
@@ -184,6 +259,7 @@ export async function GET() {
       baseline: overallBaseline,
       actual,
       projection,
+      perSubstation,
     });
   } catch (error: unknown) {
     const message =
@@ -197,6 +273,7 @@ export async function GET() {
         baseline: 0,
         actual: [],
         projection: [],
+        perSubstation: {},
       },
       { status: 500 }
     );

@@ -53,6 +53,10 @@ interface SubstationData {
   baseline: number;
   actual: { time: string; totalLoad: number }[];
   projection: { time: string; projectedLoad: number }[];
+  perSubstation: Record<
+    string,
+    { actual: { time: string; totalLoad: number }[]; baseline: number }
+  >;
 }
 
 interface MeoConcelhoData {
@@ -177,6 +181,7 @@ export default function RecoveryPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("electricity");
   const [concelhoFilter, setConcelhoFilter] = useState("");
+  const [selectedSubstation, setSelectedSubstation] = useState<string>("");
 
   useEffect(() => {
     Promise.allSettled([
@@ -375,39 +380,50 @@ export default function RecoveryPage() {
             </Card>
           )}
 
-          {/* Substation table */}
+          {/* Per-substation chart */}
           {subData?.substations && subData.substations.length > 0 && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm">Subestações</CardTitle>
+                <CardTitle className="text-sm">Carga por Subestação</CardTitle>
               </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Subestação</TableHead>
-                      <TableHead className="text-right">Última Carga (MW)</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {[...subData.substations]
-                      .sort((a, b) => (b.latestLoad ?? 0) - (a.latestLoad ?? 0))
-                      .map((s) => (
-                        <TableRow key={s.name}>
-                          <TableCell className="font-medium">{s.name}</TableCell>
-                          <TableCell className="text-right">
-                            {s.latestLoad != null ? (
-                              <span className={s.latestLoad > 0 ? "text-emerald-400" : "text-yellow-400"}>
-                                {s.latestLoad.toFixed(2)}
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground">—</span>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                  </TableBody>
-                </Table>
+              <CardContent className="space-y-4">
+                <select
+                  value={selectedSubstation}
+                  onChange={(e) => setSelectedSubstation(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="">Selecionar subestação...</option>
+                  {[...subData.substations]
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((s) => (
+                      <option key={s.name} value={s.name}>
+                        {s.name} — {s.latestLoad != null ? `${s.latestLoad.toFixed(2)} MW` : "sem dados"}
+                      </option>
+                    ))}
+                </select>
+
+                {selectedSubstation && subData.perSubstation?.[selectedSubstation] ? (
+                  <>
+                    <SubstationLoadChart
+                      actual={subData.perSubstation[selectedSubstation].actual}
+                      projection={[]}
+                      baseline={subData.perSubstation[selectedSubstation].baseline}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Baseline: {subData.perSubstation[selectedSubstation].baseline.toFixed(2)} MW
+                      (média pré-tempestade 20–25 Jan).
+                      Última carga: {subData.substations.find((s) => s.name === selectedSubstation)?.latestLoad?.toFixed(2) ?? "—"} MW.
+                    </p>
+                  </>
+                ) : selectedSubstation ? (
+                  <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
+                    Sem dados históricos para esta subestação.
+                  </div>
+                ) : (
+                  <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
+                    Selecione uma subestação para ver o gráfico de carga.
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
