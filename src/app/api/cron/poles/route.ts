@@ -19,9 +19,9 @@ export async function GET(request: NextRequest) {
   try {
     const where = `within_distance(geo_point_2d, geom'POINT(${LEIRIA_CENTER.lng} ${LEIRIA_CENTER.lat})', ${LEIRIA_RADIUS_KM}km)`;
 
-    // Use the export endpoint to bypass the 10K offset limit
+    // Use NDJSON (line-delimited JSON) export to stream large dataset without OOM
     const exportUrl = new URL(
-      `${EREDES_BASE}/catalog/datasets/${EREDES_POLES_DATASET}/exports/json`
+      `${EREDES_BASE}/catalog/datasets/${EREDES_POLES_DATASET}/exports/jsonl`
     );
     exportUrl.searchParams.set("where", where);
     exportUrl.searchParams.set("select", "geo_point_2d");
@@ -31,15 +31,21 @@ export async function GET(request: NextRequest) {
       throw new Error(`E-REDES API responded with ${res.status}`);
     }
 
-    const allResults: Array<Record<string, unknown>> = await res.json();
+    const text = await res.text();
+    const lines = text.split("\n").filter((line) => line.trim().length > 0);
 
-    // Extract lat/lng from results
-    const poles = allResults
-      .filter((r) => r.geo_point_2d != null)
-      .map((r) => {
-        const geo = r.geo_point_2d as { lat: number; lon: number };
-        return { lat: geo.lat, lng: geo.lon };
-      });
+    const poles: { lat: number; lng: number }[] = [];
+    for (const line of lines) {
+      try {
+        const record = JSON.parse(line);
+        if (record.geo_point_2d) {
+          const geo = record.geo_point_2d as { lat: number; lon: number };
+          poles.push({ lat: geo.lat, lng: geo.lon });
+        }
+      } catch {
+        // skip malformed lines
+      }
+    }
 
     // Delete all existing rows and batch insert
     await db.delete(btPoles).where(sql`1=1`);
