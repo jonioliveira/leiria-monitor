@@ -29,6 +29,8 @@ interface DashboardData {
       status: string;
       totalOutages: number;
       municipalitiesAffected: number;
+      substationsTotal: number;
+      substationsActive: number;
     };
     weather: {
       status: string;
@@ -196,6 +198,14 @@ export default function HomePage() {
               <p className="text-xs text-muted-foreground">
                 Reportes · {data?.summary.electricity.municipalitiesAffected ?? 0} concelhos
               </p>
+              {(data?.summary.electricity.substationsTotal ?? 0) > 0 && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  <span className="text-emerald-400 font-medium">
+                    {data!.summary.electricity.substationsActive}
+                  </span>
+                  /{data!.summary.electricity.substationsTotal} subestações ativas
+                </p>
+              )}
               <div className="mt-3 flex items-center text-xs text-primary">
                 Recuperação <ArrowRight className="ml-1 h-3 w-3" />
               </div>
