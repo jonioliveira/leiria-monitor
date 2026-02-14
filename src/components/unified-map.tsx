@@ -49,6 +49,7 @@ export interface SubstationMarker {
 }
 
 export interface TransformerMarker {
+  id: string;
   lat: number;
   lng: number;
   kva: number;
@@ -58,6 +59,7 @@ export interface TransformerMarker {
 }
 
 export interface AntennaFeature {
+  id: number;
   lat: number;
   lng: number;
   operators: string[];
@@ -189,10 +191,10 @@ function getPtdColor(usage: string): string {
 function createPtdIcon(usage: string): L.DivIcon {
   const color = getPtdColor(usage);
   return L.divIcon({
-    html: `<div style="width:10px;height:10px;border-radius:50%;background:${color};border:1.5px solid white;box-shadow:0 0 3px rgba(0,0,0,0.3)"></div>`,
+    html: `<div style="width:18px;height:18px;background:${color};border:2px solid white;box-shadow:0 0 5px rgba(0,0,0,0.35);transform:rotate(45deg);border-radius:2px"></div>`,
     className: "",
-    iconSize: [10, 10],
-    iconAnchor: [5, 5],
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
   });
 }
 
@@ -204,7 +206,7 @@ function getAntennaMarkerColor(operators: string[]): string {
 function createAntennaIcon(operators: string[]): L.DivIcon {
   const color = getAntennaMarkerColor(operators);
   return L.divIcon({
-    html: `<div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer"><div style="width:14px;height:14px;border-radius:50%;background:${color};border:2px solid white;box-shadow:0 0 4px rgba(0,0,0,0.35)"></div></div>`,
+    html: `<div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer"><svg width="30" height="30" viewBox="0 0 22 22"><circle cx="11" cy="13" r="5" fill="${color}" stroke="white" stroke-width="2"/><path d="M6.5 8.5a6.5 6.5 0 0 1 9 0" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round"/><path d="M4 6a10 10 0 0 1 14 0" fill="none" stroke="${color}" stroke-width="1.3" stroke-linecap="round" opacity="0.5"/></svg></div>`,
     className: "",
     iconSize: [44, 44],
     iconAnchor: [22, 22],
@@ -285,9 +287,9 @@ function Legend({ visibleLayers }: { visibleLayers: Set<string> }) {
 
         if (visibleLayers.has("transformers")) {
           html += "<strong style='color:#06b6d4'>Postos Transformação</strong><br/>";
-          html += `<span style="color:#10b981">&#9679;</span> Util. &ge;60%<br/>`;
-          html += `<span style="color:#f59e0b">&#9679;</span> Util. 40–59%<br/>`;
-          html += `<span style="color:#64748b">&#9679;</span> Util. &lt;40%<br/>`;
+          html += `<span style="color:#10b981">&#9670;</span> Util. &ge;60%<br/>`;
+          html += `<span style="color:#f59e0b">&#9670;</span> Util. 40–59%<br/>`;
+          html += `<span style="color:#64748b">&#9670;</span> Util. &lt;40%<br/>`;
         }
 
         if (visibleLayers.has("antennas")) {
@@ -512,9 +514,14 @@ export function UnifiedMap({
               <Marker key={`ptd-${i}`} position={[t.lat, t.lng]} icon={createPtdIcon(t.usage)}>
                 <Popup>
                   <div style={{ fontFamily: "sans-serif", fontSize: "13px", lineHeight: "1.6", minWidth: 160 }}>
-                    <p style={{ fontWeight: 700, fontSize: "14px", margin: "0 0 4px", color: "#06b6d4" }}>
-                      Posto de Transformação
-                    </p>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: "0 0 4px" }}>
+                      <p style={{ fontWeight: 700, fontSize: "14px", margin: 0, color: "#06b6d4" }}>
+                        Posto de Transformação
+                      </p>
+                      <span style={{ fontSize: "10px", color: "#94a3b8", fontFamily: "monospace" }}>
+                        {t.id}
+                      </span>
+                    </div>
                     <p style={{ margin: "0 0 2px" }}>
                       Concelho: <strong>{t.municipality}</strong>
                     </p>
@@ -524,8 +531,11 @@ export function UnifiedMap({
                     <p style={{ margin: "0 0 2px" }}>
                       Utilização: <strong style={{ color: getPtdColor(t.usage) }}>{t.usage}</strong>
                     </p>
-                    <p style={{ margin: 0 }}>
+                    <p style={{ margin: "0 0 2px" }}>
                       Clientes: <strong>{t.clients}</strong>
+                    </p>
+                    <p style={{ margin: "4px 0 0", fontSize: "10px", color: "#94a3b8", fontFamily: "monospace" }}>
+                      {t.lat.toFixed(5)}, {t.lng.toFixed(5)}
                     </p>
                     {hasReport ? (
                       <div style={{ marginTop: 10, padding: "6px 8px", borderRadius: 6, background: "#fef2f2", border: "1px solid #fecaca" }}>
@@ -629,9 +639,14 @@ export function UnifiedMap({
               <Marker key={`ant-${i}`} position={[a.lat, a.lng]} icon={createAntennaIcon(a.operators)}>
                 <Popup>
                   <div style={{ fontFamily: "sans-serif", fontSize: "14px", lineHeight: "1.7", minWidth: 180, maxWidth: 240 }}>
-                    <p style={{ fontWeight: 700, fontSize: "15px", margin: "0 0 6px", color: "#1f2937" }}>
-                      {a.operators.length > 1 ? "Antena partilhada" : `Antena ${a.operators[0]}`}
-                    </p>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: "0 0 6px" }}>
+                      <p style={{ fontWeight: 700, fontSize: "15px", margin: 0, color: "#1f2937" }}>
+                        {a.operators.length > 1 ? "Antena partilhada" : `Antena ${a.operators[0]}`}
+                      </p>
+                      <span style={{ fontSize: "10px", color: "#94a3b8", fontFamily: "monospace" }}>
+                        ANT-{a.id}
+                      </span>
+                    </div>
                     {a.operators.map((op) => (
                       <p key={op} style={{ margin: "0 0 2px" }}>
                         <span
@@ -653,6 +668,9 @@ export function UnifiedMap({
                         {a.technologies.map((t) => TECH_LABELS[t] ?? t).join(" · ")}
                       </p>
                     )}
+                    <p style={{ margin: "4px 0 0", fontSize: "10px", color: "#94a3b8", fontFamily: "monospace" }}>
+                      {a.lat.toFixed(5)}, {a.lng.toFixed(5)}
+                    </p>
                     {hasReport ? (
                       <div style={{ marginTop: 10, padding: "6px 8px", borderRadius: 6, background: "#fef2f2", border: "1px solid #fecaca" }}>
                         <p style={{ margin: "0 0 4px", fontSize: "12px", fontWeight: 700, color: "#dc2626" }}>

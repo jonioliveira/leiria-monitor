@@ -14,6 +14,7 @@ export async function GET() {
     const rows = await db.select().from(antennas);
 
     const result = rows.map((r) => ({
+      id: r.id,
       lat: r.lat,
       lng: r.lng,
       operators: r.operators,

@@ -24,7 +24,7 @@ export async function GET() {
     baseUrl.searchParams.set("where", where);
     baseUrl.searchParams.set(
       "select",
-      "coordenadas_geo,potencia_transformacao_kva,nivel_utilizacao,num_clientes,con_name"
+      "cod_instalacao,coordenadas_geo,potencia_transformacao_kva,nivel_utilizacao,num_clientes,con_name"
     );
 
     const firstRes = await fetch(baseUrl.toString(), {
@@ -74,6 +74,7 @@ export async function GET() {
       .map((r: Record<string, unknown>) => {
         const geo = r.coordenadas_geo as { lat: number; lon: number };
         return {
+          id: (r.cod_instalacao as string) ?? "",
           lat: geo.lat,
           lng: geo.lon,
           kva: (r.potencia_transformacao_kva as number) ?? 0,
