@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Nav } from "@/components/nav";
+import { OfflineBanner } from "@/components/offline-banner";
 
 export const metadata: Metadata = {
   title: "Rede Sentinela — Leiria",
@@ -16,6 +17,7 @@ export default function RootLayout({
   return (
     <html lang="pt">
       <body className="min-h-screen antialiased">
+        <OfflineBanner />
         <Nav />
         <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
           {children}

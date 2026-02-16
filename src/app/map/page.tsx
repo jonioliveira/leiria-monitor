@@ -1,18 +1,20 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ReportPanel } from "@/components/report-panel";
 import type { InfraContext } from "@/components/report-panel";
 import {
   MapPin, Radio, Activity, MessageSquarePlus, Check, LocateFixed,
-  Search, Zap, Wifi, Globe, Droplets, ThumbsUp, CheckCircle, Map, List,
+  Search, Zap, Wifi, Globe, Droplets, Construction, ThumbsUp, CheckCircle, Map, List, Share2,
 } from "lucide-react";
 import type {
   TransformerMarker,
   AntennaFeature,
   Report,
+  Hotspot,
   InfraReportContext,
   PoleMarker,
 } from "@/components/unified-map";
@@ -24,6 +26,14 @@ function timeAgo(dateStr: string): string {
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `há ${hours}h`;
   return `há ${Math.floor(hours / 24)}d`;
+}
+
+function isStale(r: Report): boolean {
+  const now = Date.now();
+  const ageMs = now - new Date(r.createdAt).getTime();
+  if (ageMs < 48 * 60 * 60 * 1000) return false;
+  if (!r.lastUpvotedAt) return true;
+  return now - new Date(r.lastUpvotedAt).getTime() > 24 * 60 * 60 * 1000;
 }
 
 const UnifiedMap = dynamic(
@@ -53,14 +63,12 @@ function resolveReportConcelho(
   transformers: TransformerMarker[],
 ): string {
   if (r.street) {
-    // If street contains a known municipality-like label, use it
     for (const t of transformers) {
       if (r.lat.toFixed(5) === t.lat.toFixed(5) && r.lng.toFixed(5) === t.lng.toFixed(5)) {
         return t.municipality;
       }
     }
   }
-  // Find nearest transformer by distance
   let best = "";
   let bestDist = Infinity;
   for (const t of transformers) {
@@ -76,9 +84,19 @@ function resolveReportConcelho(
 type ViewMode = "map" | "list";
 
 export default function MapaPage() {
+  return (
+    <Suspense fallback={<Skeleton className="h-[80vh] w-full" />}>
+      <MapaPageInner />
+    </Suspense>
+  );
+}
+
+function MapaPageInner() {
+  const searchParams = useSearchParams();
   const [transformers, setTransformers] = useState<TransformerMarker[]>([]);
   const [antennas, setAntennas] = useState<AntennaFeature[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
+  const [hotspots, setHotspots] = useState<Hotspot[]>([]);
   const [poles, setPoles] = useState<PoleMarker[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<ViewMode>("map");
@@ -88,6 +106,8 @@ export default function MapaPage() {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [flyTo, setFlyTo] = useState<{ lat: number; lng: number; zoom: number } | null>(null);
   const [locating, setLocating] = useState(false);
+  const [shareToast, setShareToast] = useState(false);
+  const deepLinkHandled = useRef(false);
 
   const [visibleLayers, setVisibleLayers] = useState<Set<string>>(
     new Set(["transformers", "antennas", "reports"])
@@ -105,12 +125,20 @@ export default function MapaPage() {
   // Report list state
   const [listSearch, setListSearch] = useState("");
 
-  // Enrich reports with concelho
+  // Enrich reports with concelho and sort by priority then recency
   const enrichedReports = useMemo(() => {
-    return reports.map((r) => ({
-      ...r,
-      concelho: resolveReportConcelho(r, transformers),
-    }));
+    const priorityOrder = { urgente: 0, importante: 1, normal: 2 };
+    return reports
+      .map((r) => ({
+        ...r,
+        concelho: r.parish ? resolveReportConcelho(r, transformers) : resolveReportConcelho(r, transformers),
+      }))
+      .sort((a, b) => {
+        const pa = priorityOrder[a.priority ?? "normal"] ?? 2;
+        const pb = priorityOrder[b.priority ?? "normal"] ?? 2;
+        if (pa !== pb) return pa - pb;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
   }, [reports, transformers]);
 
   // Get unique concelhos for quick filter
@@ -124,25 +152,36 @@ export default function MapaPage() {
     const q = listSearch.toLowerCase();
     return enrichedReports.filter((r) =>
       r.concelho.toLowerCase().includes(q) ||
+      (r.parish?.toLowerCase().includes(q)) ||
       (r.street?.toLowerCase().includes(q)) ||
       (r.description?.toLowerCase().includes(q)) ||
       (r.operator?.toLowerCase().includes(q)) ||
       (r.type === "electricity" && "sem luz".includes(q)) ||
       (r.type === "telecom_mobile" && "sem rede móvel".includes(q)) ||
       (r.type === "telecom_fixed" && "sem rede fixa".includes(q)) ||
-      (r.type === "water" && "sem água".includes(q))
+      (r.type === "water" && "sem água".includes(q)) ||
+      (r.type === "roads" && "estrada cortada".includes(q))
     );
   }, [enrichedReports, listSearch]);
 
-  // Group filtered reports by concelho
+  // Group filtered reports by concelho → parish
   const groupedReports = useMemo(() => {
-    const map: Record<string, (typeof filteredReports)[number][]> = {};
+    const map: Record<string, Record<string, (typeof filteredReports)[number][]>> = {};
     for (const r of filteredReports) {
-      const arr = map[r.concelho];
-      if (arr) arr.push(r);
-      else map[r.concelho] = [r];
+      const conc = r.concelho;
+      const parish = r.parish ?? "Sem freguesia";
+      if (!map[conc]) map[conc] = {};
+      const parishMap = map[conc];
+      if (!parishMap[parish]) parishMap[parish] = [];
+      parishMap[parish].push(r);
     }
-    return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
+    return Object.entries(map)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([conc, parishes]) => ({
+        concelho: conc,
+        parishes: Object.entries(parishes).sort(([a], [b]) => a.localeCompare(b)),
+        total: Object.values(parishes).reduce((s, arr) => s + arr.length, 0),
+      }));
   }, [filteredReports]);
 
   const fetchReports = useCallback(async () => {
@@ -151,13 +190,13 @@ export default function MapaPage() {
       if (res.ok) {
         const data = await res.json();
         setReports(data.reports ?? []);
+        setHotspots(data.hotspots ?? []);
       }
     } catch { /* silent */ }
   }, []);
 
   const handleBoundsChange = useCallback((bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number }) => {
     setMapBounds(bounds);
-    // Estimate zoom from lat span — rough but sufficient
     const latSpan = bounds.maxLat - bounds.minLat;
     const estimatedZoom = latSpan > 0 ? Math.round(Math.log2(180 / latSpan)) : 10;
     setMapZoom(estimatedZoom);
@@ -177,6 +216,31 @@ export default function MapaPage() {
       { enableHighAccuracy: true, timeout: 10000 }
     );
   }
+
+  function handleShare(id: number) {
+    const url = `${window.location.origin}/map?report=${id}`;
+    if (navigator.share) {
+      navigator.share({ title: "Rede Sentinela — Reporte", url }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(url).then(() => {
+        setShareToast(true);
+        setTimeout(() => setShareToast(false), 2000);
+      });
+    }
+  }
+
+  // Deep link: ?report=123
+  useEffect(() => {
+    if (deepLinkHandled.current) return;
+    const reportId = searchParams.get("report");
+    if (!reportId || reports.length === 0) return;
+
+    const target = reports.find((r) => r.id === Number(reportId));
+    if (target) {
+      deepLinkHandled.current = true;
+      setFlyTo({ lat: target.lat, lng: target.lng, zoom: 16 });
+    }
+  }, [searchParams, reports]);
 
   // Debounced pole fetching when layer is visible and zoom >= 14
   useEffect(() => {
@@ -219,6 +283,7 @@ export default function MapaPage() {
         if (reportsRes.status === "fulfilled" && reportsRes.value.ok) {
           const reportsData = await reportsRes.value.json();
           setReports(reportsData.reports ?? []);
+          setHotspots(reportsData.hotspots ?? []);
         }
 
         if (ptdRes.status === "fulfilled" && ptdRes.value.ok) {
@@ -285,7 +350,7 @@ export default function MapaPage() {
         body: JSON.stringify({ id, action: "upvote" }),
       });
       setReports((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, upvotes: r.upvotes + 1 } : r))
+        prev.map((r) => (r.id === id ? { ...r, upvotes: r.upvotes + 1, lastUpvotedAt: new Date().toISOString() } : r))
       );
     } catch { /* silent */ }
   }
@@ -311,6 +376,13 @@ export default function MapaPage() {
 
   return (
     <div className="flex h-full flex-col bg-background">
+      {/* Share toast */}
+      {shareToast && (
+        <div className="fixed top-4 left-1/2 z-[2000] -translate-x-1/2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-lg">
+          Link copiado!
+        </div>
+      )}
+
       {/* View toggle bar */}
       <div className="flex items-center justify-between border-b border-border bg-background px-4 py-2">
         <div className="flex gap-1">
@@ -360,13 +432,14 @@ export default function MapaPage() {
       {view === "map" && (
         <div className="relative flex-1">
           <UnifiedMap
-            layers={{ transformers, antennas, reports, poles }}
+            layers={{ transformers, antennas, reports, poles, hotspots }}
             visibleLayers={visibleLayers}
             visibleOperators={visibleOperators}
             onMapClick={handleMapClick}
             onReportInfra={handleReportInfra}
             onUpvote={handleUpvote}
             onResolve={handleResolve}
+            onShare={handleShare}
             onBoundsChange={handleBoundsChange}
             clickedPosition={reportLat != null && reportLng != null ? { lat: reportLat, lng: reportLng } : null}
             userLocation={userLocation}
@@ -465,7 +538,7 @@ export default function MapaPage() {
                 type="text"
                 value={listSearch}
                 onChange={(e) => setListSearch(e.target.value)}
-                placeholder="Pesquisar por concelho, rua, descrição..."
+                placeholder="Pesquisar por concelho, freguesia, rua, descrição..."
                 className="w-full rounded-lg border border-border bg-input pl-9 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none"
               />
             </div>
@@ -501,68 +574,110 @@ export default function MapaPage() {
                 </p>
               </div>
             ) : (
-              groupedReports.map(([concelho, items]) => (
+              groupedReports.map(({ concelho, parishes, total }) => (
                 <div key={concelho}>
                   {/* Concelho header */}
                   <div className="sticky top-0 z-10 border-b border-border bg-muted/50 px-4 py-1.5 backdrop-blur-sm">
                     <p className="text-xs font-semibold text-muted-foreground">
-                      {concelho} ({items.length})
+                      {concelho} ({total})
                     </p>
                   </div>
 
-                  {/* Reports in this concelho */}
-                  {items.map((r) => (
-                    <div
-                      key={r.id}
-                      className="flex items-start gap-3 border-b border-border/50 px-4 py-3"
-                    >
-                      {/* Type icon */}
-                      <div className="mt-0.5 shrink-0 rounded-full bg-muted p-2">
-                        {r.type === "electricity" ? (
-                          <Zap className="h-4 w-4 text-amber-400" />
-                        ) : r.type === "telecom_mobile" ? (
-                          <Wifi className="h-4 w-4 text-blue-400" />
-                        ) : r.type === "telecom_fixed" ? (
-                          <Globe className="h-4 w-4 text-indigo-400" />
-                        ) : (
-                          <Droplets className="h-4 w-4 text-cyan-400" />
-                        )}
-                      </div>
-
-                      {/* Content */}
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-foreground">
-                          {r.type === "electricity" ? "Sem luz" : r.type === "telecom_mobile" ? `Sem rede móvel${r.operator ? ` ${r.operator}` : ""}` : r.type === "telecom_fixed" ? `Sem rede fixa${r.operator ? ` ${r.operator}` : ""}` : "Sem água"}
-                        </p>
-                        {r.street && (
-                          <p className="text-xs text-muted-foreground mt-0.5">{r.street}</p>
-                        )}
-                        {r.description && (
-                          <p className="text-xs text-foreground/80 mt-1">{r.description}</p>
-                        )}
-                        <div className="mt-1.5 flex items-center gap-3 text-xs text-muted-foreground">
-                          <span>{timeAgo(r.createdAt)}</span>
-                          <span>{r.upvotes} confirmação{r.upvotes !== 1 ? "ões" : ""}</span>
+                  {parishes.map(([parish, items]) => (
+                    <div key={`${concelho}-${parish}`}>
+                      {/* Parish sub-header */}
+                      {parish !== "Sem freguesia" && (
+                        <div className="border-b border-border/30 bg-muted/20 px-6 py-1">
+                          <p className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wider">
+                            {parish}
+                          </p>
                         </div>
-                      </div>
+                      )}
 
-                      {/* Actions */}
-                      <div className="flex shrink-0 flex-col gap-1 sm:flex-row">
-                        <button
-                          onClick={() => handleUpvote(r.id)}
-                          className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-blue-400 transition-colors hover:bg-blue-400/10"
+                      {/* Reports in this parish */}
+                      {items.map((r) => (
+                        <div
+                          key={r.id}
+                          className={`flex items-start gap-3 border-b border-border/50 px-4 py-3 ${
+                            isStale(r) ? "opacity-60" : ""
+                          }`}
                         >
-                          <ThumbsUp className="h-3.5 w-3.5" />
-                          <span className="hidden sm:inline">Confirmo</span>
-                        </button>
-                        <button
-                          onClick={() => handleResolve(r.id)}
-                          className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-emerald-400 transition-colors hover:bg-emerald-400/10"
-                        >
-                          <CheckCircle className="h-3.5 w-3.5" />
-                          <span className="hidden sm:inline">Resolvido</span>
-                        </button>
-                      </div>
+                          {/* Type icon */}
+                          <div className="mt-0.5 shrink-0 rounded-full bg-muted p-2">
+                            {r.type === "electricity" ? (
+                              <Zap className="h-4 w-4 text-amber-400" />
+                            ) : r.type === "telecom_mobile" ? (
+                              <Wifi className="h-4 w-4 text-blue-400" />
+                            ) : r.type === "telecom_fixed" ? (
+                              <Globe className="h-4 w-4 text-indigo-400" />
+                            ) : r.type === "roads" ? (
+                              <Construction className="h-4 w-4 text-orange-400" />
+                            ) : (
+                              <Droplets className="h-4 w-4 text-cyan-400" />
+                            )}
+                          </div>
+
+                          {/* Content */}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium text-foreground">
+                                {r.type === "electricity" ? "Sem luz" : r.type === "telecom_mobile" ? `Sem rede móvel${r.operator ? ` ${r.operator}` : ""}` : r.type === "telecom_fixed" ? `Sem rede fixa${r.operator ? ` ${r.operator}` : ""}` : r.type === "roads" ? "Estrada cortada" : "Sem água"}
+                              </p>
+                              {r.priority && r.priority !== "normal" && (
+                                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold leading-none text-white ${
+                                  r.priority === "urgente" ? "bg-red-500" : "bg-orange-500"
+                                }`}>
+                                  {r.priority === "urgente" ? "Urgente" : "Importante"}
+                                </span>
+                              )}
+                            </div>
+                            {r.street && (
+                              <p className="text-xs text-muted-foreground mt-0.5">{r.street}</p>
+                            )}
+                            {r.description && (
+                              <p className="text-xs text-foreground/80 mt-1">{r.description}</p>
+                            )}
+                            {r.imageUrl && (
+                              <img
+                                src={r.imageUrl}
+                                alt=""
+                                className="mt-1.5 h-16 w-24 rounded object-cover border border-border"
+                              />
+                            )}
+                            <div className="mt-1.5 flex items-center gap-3 text-xs text-muted-foreground">
+                              <span>{timeAgo(r.createdAt)}</span>
+                              <span>{r.upvotes} confirmação{r.upvotes !== 1 ? "ões" : ""}</span>
+                            </div>
+                            {isStale(r) && (
+                              <p className="mt-0.5 text-[10px] text-amber-500">Sem confirmação recente</p>
+                            )}
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex shrink-0 flex-col gap-1 sm:flex-row">
+                            <button
+                              onClick={() => handleUpvote(r.id)}
+                              className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-blue-400 transition-colors hover:bg-blue-400/10"
+                            >
+                              <ThumbsUp className="h-3.5 w-3.5" />
+                              <span className="hidden sm:inline">Confirmo</span>
+                            </button>
+                            <button
+                              onClick={() => handleResolve(r.id)}
+                              className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-emerald-400 transition-colors hover:bg-emerald-400/10"
+                            >
+                              <CheckCircle className="h-3.5 w-3.5" />
+                              <span className="hidden sm:inline">Resolvido</span>
+                            </button>
+                            <button
+                              onClick={() => handleShare(r.id)}
+                              className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent"
+                            >
+                              <Share2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   ))}
                 </div>

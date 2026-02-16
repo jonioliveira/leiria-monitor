@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { Zap, Wifi, Globe, Droplets, X, ThumbsUp, MapPin } from "lucide-react";
+import { useState, useRef } from "react";
+import { Zap, Wifi, Globe, Droplets, Construction, X, ThumbsUp, MapPin, Camera, Loader2 } from "lucide-react";
 
-type ReportType = "electricity" | "telecom_mobile" | "telecom_fixed" | "water";
+type ReportType = "electricity" | "telecom_mobile" | "telecom_fixed" | "water" | "roads";
 const OPERATORS = ["MEO", "NOS", "Vodafone", "DIGI"] as const;
 
 export interface InfraContext {
@@ -29,9 +29,30 @@ export function ReportPanel({ lat, lng, open, onClose, onSubmitted, infraContext
   const [formDescription, setFormDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submittedPriority, setSubmittedPriority] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const effectiveType = infraContext?.type ?? formType;
   const effectiveOperator = infraContext?.operator ?? (effectiveType.startsWith("telecom") ? formOperator : null);
+
+  async function handleImageUpload(file: File) {
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append("image", file);
+      const res = await fetch("/api/reports/upload", { method: "POST", body: form });
+      if (res.ok) {
+        const data = await res.json();
+        setImageUrl(data.imageUrl);
+      }
+    } catch {
+      /* silent */
+    } finally {
+      setUploading(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -49,18 +70,23 @@ export function ReportPanel({ lat, lng, open, onClose, onSubmitted, infraContext
           street: infraContext ? infraContext.label : (formStreet || null),
           lat,
           lng,
+          imageUrl,
         }),
       });
 
       if (res.ok) {
+        const data = await res.json();
+        setSubmittedPriority(data.priority ?? "normal");
         setSubmitted(true);
         setFormStreet("");
         setFormDescription("");
+        setImageUrl(null);
         onSubmitted();
         setTimeout(() => {
           setSubmitted(false);
+          setSubmittedPriority(null);
           onClose();
-        }, 2000);
+        }, 3000);
       }
     } catch {
       /* silent */
@@ -93,6 +119,13 @@ export function ReportPanel({ lat, lng, open, onClose, onSubmitted, infraContext
               <ThumbsUp className="h-6 w-6 text-emerald-400" />
             </div>
             <p className="text-sm font-medium text-emerald-400">Reporte enviado!</p>
+            {submittedPriority && submittedPriority !== "normal" && (
+              <span className={`inline-block rounded-full px-3 py-0.5 text-xs font-bold text-white ${
+                submittedPriority === "urgente" ? "bg-red-500" : "bg-orange-500"
+              }`}>
+                Prioridade: {submittedPriority === "urgente" ? "Urgente" : "Importante"}
+              </span>
+            )}
           </div>
         ) : infraContext ? (
           <InfraReportForm
@@ -101,6 +134,10 @@ export function ReportPanel({ lat, lng, open, onClose, onSubmitted, infraContext
             setFormDescription={setFormDescription}
             submitting={submitting}
             onSubmit={handleSubmit}
+            imageUrl={imageUrl}
+            uploading={uploading}
+            fileRef={fileRef}
+            onImageUpload={handleImageUpload}
           />
         ) : (
           <ReportForm
@@ -116,6 +153,10 @@ export function ReportPanel({ lat, lng, open, onClose, onSubmitted, infraContext
             setFormDescription={setFormDescription}
             submitting={submitting}
             onSubmit={handleSubmit}
+            imageUrl={imageUrl}
+            uploading={uploading}
+            fileRef={fileRef}
+            onImageUpload={handleImageUpload}
           />
         )}
       </div>
@@ -144,6 +185,13 @@ export function ReportPanel({ lat, lng, open, onClose, onSubmitted, infraContext
               <ThumbsUp className="h-6 w-6 text-emerald-400" />
             </div>
             <p className="text-sm font-medium text-emerald-400">Reporte enviado!</p>
+            {submittedPriority && submittedPriority !== "normal" && (
+              <span className={`inline-block rounded-full px-3 py-0.5 text-xs font-bold text-white ${
+                submittedPriority === "urgente" ? "bg-red-500" : "bg-orange-500"
+              }`}>
+                Prioridade: {submittedPriority === "urgente" ? "Urgente" : "Importante"}
+              </span>
+            )}
             <p className="text-xs text-muted-foreground">Obrigado pela contribuição.</p>
           </div>
         ) : infraContext ? (
@@ -153,6 +201,10 @@ export function ReportPanel({ lat, lng, open, onClose, onSubmitted, infraContext
             setFormDescription={setFormDescription}
             submitting={submitting}
             onSubmit={handleSubmit}
+            imageUrl={imageUrl}
+            uploading={uploading}
+            fileRef={fileRef}
+            onImageUpload={handleImageUpload}
           />
         ) : (
           <ReportForm
@@ -168,10 +220,74 @@ export function ReportPanel({ lat, lng, open, onClose, onSubmitted, infraContext
             setFormDescription={setFormDescription}
             submitting={submitting}
             onSubmit={handleSubmit}
+            imageUrl={imageUrl}
+            uploading={uploading}
+            fileRef={fileRef}
+            onImageUpload={handleImageUpload}
           />
         )}
       </div>
     </>
+  );
+}
+
+/* ── Photo upload section ─────────────────────────────────── */
+
+function PhotoUpload({
+  imageUrl,
+  uploading,
+  fileRef,
+  onImageUpload,
+}: {
+  imageUrl: string | null;
+  uploading: boolean;
+  fileRef: React.RefObject<HTMLInputElement | null>;
+  onImageUpload: (file: File) => void;
+}) {
+  return (
+    <div>
+      <label className="text-xs font-medium text-muted-foreground">
+        Foto <span className="text-muted-foreground/60">(opcional)</span>
+      </label>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) onImageUpload(file);
+        }}
+      />
+      {imageUrl ? (
+        <div className="mt-1.5 relative">
+          <img src={imageUrl} alt="Preview" className="w-full max-h-32 object-cover rounded-lg border border-border" />
+          <button
+            type="button"
+            onClick={() => {
+              if (fileRef.current) fileRef.current.value = "";
+            }}
+            className="absolute top-1 right-1 rounded-full bg-background/80 p-1 text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          className="mt-1.5 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border py-3 text-sm text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground disabled:opacity-50"
+        >
+          {uploading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Camera className="h-4 w-4" />
+          )}
+          {uploading ? "A carregar..." : "Adicionar foto"}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -190,6 +306,10 @@ function ReportForm({
   setFormDescription,
   submitting,
   onSubmit,
+  imageUrl,
+  uploading,
+  fileRef,
+  onImageUpload,
 }: {
   lat: number | null;
   lng: number | null;
@@ -203,6 +323,10 @@ function ReportForm({
   setFormDescription: (d: string) => void;
   submitting: boolean;
   onSubmit: (e: React.FormEvent) => void;
+  imageUrl: string | null;
+  uploading: boolean;
+  fileRef: React.RefObject<HTMLInputElement | null>;
+  onImageUpload: (file: File) => void;
 }) {
   return (
     <form onSubmit={onSubmit} className="space-y-4">
@@ -214,10 +338,10 @@ function ReportForm({
         </p>
       </div>
 
-      {/* Type */}
+      {/* Type — 5 buttons: 3 on first row, 2 on second */}
       <div>
         <label className="text-xs font-medium text-muted-foreground">Tipo de problema</label>
-        <div className="mt-1.5 grid grid-cols-2 gap-2">
+        <div className="mt-1.5 grid grid-cols-3 gap-2">
           <button
             type="button"
             onClick={() => setFormType("electricity")}
@@ -240,7 +364,7 @@ function ReportForm({
             }`}
           >
             <Wifi className="h-4 w-4" />
-            Sem Rede Móvel
+            Móvel
           </button>
           <button
             type="button"
@@ -252,19 +376,31 @@ function ReportForm({
             }`}
           >
             <Globe className="h-4 w-4" />
-            Sem Rede Fixa
+            Fixa
           </button>
           <button
             type="button"
             onClick={() => setFormType("water")}
-            className={`flex items-center justify-center gap-2 rounded-lg border p-3 text-sm font-medium transition-colors ${
+            className={`col-span-1 flex items-center justify-center gap-2 rounded-lg border p-3 text-sm font-medium transition-colors ${
               formType === "water"
                 ? "border-cyan-400/50 bg-cyan-400/10 text-cyan-400"
                 : "border-border text-muted-foreground hover:border-foreground/20"
             }`}
           >
             <Droplets className="h-4 w-4" />
-            Sem Água
+            Água
+          </button>
+          <button
+            type="button"
+            onClick={() => setFormType("roads")}
+            className={`col-span-2 flex items-center justify-center gap-2 rounded-lg border p-3 text-sm font-medium transition-colors ${
+              formType === "roads"
+                ? "border-orange-400/50 bg-orange-400/10 text-orange-400"
+                : "border-border text-muted-foreground hover:border-foreground/20"
+            }`}
+          >
+            <Construction className="h-4 w-4" />
+            Estrada Cortada
           </button>
         </div>
       </div>
@@ -320,6 +456,14 @@ function ReportForm({
         />
       </div>
 
+      {/* Photo upload */}
+      <PhotoUpload
+        imageUrl={imageUrl}
+        uploading={uploading}
+        fileRef={fileRef}
+        onImageUpload={onImageUpload}
+      />
+
       <button
         type="submit"
         disabled={submitting}
@@ -339,12 +483,20 @@ function InfraReportForm({
   setFormDescription,
   submitting,
   onSubmit,
+  imageUrl,
+  uploading,
+  fileRef,
+  onImageUpload,
 }: {
   infraContext: InfraContext;
   formDescription: string;
   setFormDescription: (d: string) => void;
   submitting: boolean;
   onSubmit: (e: React.FormEvent) => void;
+  imageUrl: string | null;
+  uploading: boolean;
+  fileRef: React.RefObject<HTMLInputElement | null>;
+  onImageUpload: (file: File) => void;
 }) {
   return (
     <form onSubmit={onSubmit} className="space-y-4">
@@ -370,6 +522,14 @@ function InfraReportForm({
           className="mt-1 w-full resize-none rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none"
         />
       </div>
+
+      {/* Photo upload */}
+      <PhotoUpload
+        imageUrl={imageUrl}
+        uploading={uploading}
+        fileRef={fileRef}
+        onImageUpload={onImageUpload}
+      />
 
       <button
         type="submit"

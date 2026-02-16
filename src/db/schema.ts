@@ -113,13 +113,17 @@ export const btPoles = pgTable("bt_poles", {
 
 export const userReports = pgTable("user_reports", {
   id: serial("id").primaryKey(),
-  type: text("type").notNull(), // "electricity" | "telecom_mobile" | "telecom_fixed" | "water"
-  operator: text("operator"), // null for electricity/water, "MEO"/"NOS"/"Vodafone"/"DIGI" for telecom types
+  type: text("type").notNull(), // "electricity" | "telecom_mobile" | "telecom_fixed" | "water" | "roads"
+  operator: text("operator"), // null for electricity/water/roads, "MEO"/"NOS"/"Vodafone"/"DIGI" for telecom types
   description: text("description"),
   street: text("street"),
+  parish: text("parish"),
   lat: real("lat").notNull(),
   lng: real("lng").notNull(),
+  priority: text("priority").default("normal").notNull(), // "urgente" | "importante" | "normal"
   resolved: boolean("resolved").default(false).notNull(),
   upvotes: integer("upvotes").default(1).notNull(),
+  lastUpvotedAt: timestamp("last_upvoted_at", { withTimezone: true }),
+  imageUrl: text("image_url"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
