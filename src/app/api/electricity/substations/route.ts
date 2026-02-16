@@ -2,14 +2,14 @@ import { NextResponse } from "next/server";
 import { EREDES_BASE, EREDES_SUBSTATION_DATASET } from "@/lib/constants";
 
 export const revalidate = 300; // 5 minutes
+export const maxDuration = 60;
 
-// Fetch all pages of an aggregation query
+// Fetch all pages in parallel batches of 10
 async function fetchAllPages(
   baseUrl: URL,
   signal: AbortSignal,
   pageSize = 100
 ): Promise<Record<string, unknown>[]> {
-  // First page
   const res = await fetch(baseUrl.toString(), {
     signal,
     next: { revalidate: 300 },
@@ -19,17 +19,25 @@ async function fetchAllPages(
   const total = json.total_count ?? 0;
   const allResults = [...(json.results ?? [])];
 
-  // Remaining pages
-  for (let offset = pageSize; offset < total; offset += pageSize) {
-    const pageUrl = new URL(baseUrl.toString());
-    pageUrl.searchParams.set("offset", String(offset));
-    const pageRes = await fetch(pageUrl.toString(), {
-      signal,
-      next: { revalidate: 300 },
-    });
-    if (pageRes.ok) {
-      const pageJson = await pageRes.json();
-      allResults.push(...(pageJson.results ?? []));
+  const offsets: number[] = [];
+  for (let o = pageSize; o < Math.min(total, 10000); o += pageSize) {
+    offsets.push(o);
+  }
+
+  for (let i = 0; i < offsets.length; i += 10) {
+    const batch = offsets.slice(i, i + 10);
+    const results = await Promise.allSettled(
+      batch.map((offset) => {
+        const pageUrl = new URL(baseUrl.toString());
+        pageUrl.searchParams.set("offset", String(offset));
+        return fetch(pageUrl.toString(), { signal, next: { revalidate: 300 } });
+      })
+    );
+    for (const r of results) {
+      if (r.status === "fulfilled" && r.value.ok) {
+        const pageJson = await r.value.json();
+        allResults.push(...(pageJson.results ?? []));
+      }
     }
   }
 
@@ -38,7 +46,7 @@ async function fetchAllPages(
 
 export async function GET() {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20_000);
+  const timeout = setTimeout(() => controller.abort(), 55_000);
 
   try {
     // Fetch Jan 20 – Feb 3: covers baseline (20-25), storm (28), recovery (29+)
@@ -105,8 +113,8 @@ export async function GET() {
     if (hourlyResults.status === "fulfilled") {
       for (const r of hourlyResults.value) {
         const hourKey =
-          (r["hour"] as string) ??
-          (r["date_format(datahora,'yyyy-MM-dd HH')"] as string) ??
+          (r["hour"] as string | null) ||
+          (r["date_format(datahora,'yyyy-MM-dd HH')"] as string | null) ||
           "";
         const energia = (r["total_energia"] as number) ?? 0;
         hourlyRaw.push({ hour: hourKey, energia });
@@ -207,8 +215,8 @@ export async function GET() {
       for (const r of perSubResults.value) {
         const name = (r["subestacao"] as string) ?? "";
         const hourKey =
-          (r["hour"] as string) ??
-          (r["date_format(datahora,'yyyy-MM-dd HH')"] as string) ??
+          (r["hour"] as string | null) ||
+          (r["date_format(datahora,'yyyy-MM-dd HH')"] as string | null) ||
           "";
         const energia = (r["total_energia"] as number) ?? 0;
         if (!name || !hourKey) continue;

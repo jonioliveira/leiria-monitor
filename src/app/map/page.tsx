@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ReportPanel } from "@/components/report-panel";
 import type { InfraContext } from "@/components/report-panel";
 import {
-  MapPin, Radio, Activity, MessageSquarePlus, Check,
+  MapPin, Radio, Activity, MessageSquarePlus, Check, LocateFixed,
   Search, Zap, Wifi, Globe, Droplets, ThumbsUp, CheckCircle, Map, List,
 } from "lucide-react";
 import type {
@@ -85,6 +85,9 @@ export default function MapaPage() {
   const [mapBounds, setMapBounds] = useState<{ minLat: number; maxLat: number; minLng: number; maxLng: number } | null>(null);
   const [mapZoom, setMapZoom] = useState(10);
   const poleFetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [flyTo, setFlyTo] = useState<{ lat: number; lng: number; zoom: number } | null>(null);
+  const [locating, setLocating] = useState(false);
 
   const [visibleLayers, setVisibleLayers] = useState<Set<string>>(
     new Set(["transformers", "antennas", "reports"])
@@ -159,6 +162,21 @@ export default function MapaPage() {
     const estimatedZoom = latSpan > 0 ? Math.round(Math.log2(180 / latSpan)) : 10;
     setMapZoom(estimatedZoom);
   }, []);
+
+  function handleLocate() {
+    if (!navigator.geolocation) return;
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setUserLocation(loc);
+        setFlyTo({ ...loc, zoom: 15 });
+        setLocating(false);
+      },
+      () => setLocating(false),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
 
   // Debounced pole fetching when layer is visible and zoom >= 14
   useEffect(() => {
@@ -351,7 +369,23 @@ export default function MapaPage() {
             onResolve={handleResolve}
             onBoundsChange={handleBoundsChange}
             clickedPosition={reportLat != null && reportLng != null ? { lat: reportLat, lng: reportLng } : null}
+            userLocation={userLocation}
+            flyTo={flyTo}
           />
+
+          {/* Locate me button — top-right */}
+          <button
+            onClick={handleLocate}
+            disabled={locating}
+            className={`absolute right-3 top-3 z-[1000] flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium shadow-md transition-colors ${
+              userLocation
+                ? "bg-blue-500 text-white"
+                : "bg-background/90 text-muted-foreground hover:bg-accent border border-border"
+            }`}
+          >
+            <LocateFixed className={`h-3.5 w-3.5 ${locating ? "animate-spin" : ""}`} />
+            {locating ? "A localizar..." : "A minha localização"}
+          </button>
 
           {/* Zoom gate message for poles layer */}
           {visibleLayers.has("poles") && mapZoom < 14 && (

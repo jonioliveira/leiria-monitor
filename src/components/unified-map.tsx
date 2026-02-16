@@ -112,6 +112,8 @@ export interface UnifiedMapProps {
   onResolve?: (id: number) => void;
   onBoundsChange?: (bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number }) => void;
   clickedPosition?: { lat: number; lng: number } | null;
+  userLocation?: { lat: number; lng: number } | null;
+  flyTo?: { lat: number; lng: number; zoom: number } | null;
 }
 
 /* ── Constants ─────────────────────────────────────────────── */
@@ -287,6 +289,29 @@ function BoundsTracker({
   return null;
 }
 
+/* ── FlyTo helper ──────────────────────────────────────────── */
+
+function FlyToPosition({ lat, lng, zoom }: { lat: number; lng: number; zoom: number }) {
+  const map = useMap();
+  useEffect(() => {
+    map.flyTo([lat, lng], zoom, { duration: 1.5 });
+  }, [map, lat, lng, zoom]);
+  return null;
+}
+
+/* ── User location icon ────────────────────────────────────── */
+
+const userLocationIcon = L.divIcon({
+  html: `<div style="position:relative;width:20px;height:20px">
+    <div style="position:absolute;inset:0;border-radius:50%;background:rgba(59,130,246,0.2);animation:locPulse 2s ease-out infinite"></div>
+    <div style="position:absolute;top:4px;left:4px;width:12px;height:12px;border-radius:50%;background:#3b82f6;border:2.5px solid white;box-shadow:0 0 6px rgba(59,130,246,0.5)"></div>
+  </div>
+  <style>@keyframes locPulse{0%{transform:scale(1);opacity:1}100%{transform:scale(2.5);opacity:0}}</style>`,
+  className: "",
+  iconSize: [20, 20],
+  iconAnchor: [10, 10],
+});
+
 /* ── Pole icon helpers ─────────────────────────────────────── */
 
 const poleIcon = L.divIcon({
@@ -398,6 +423,8 @@ export function UnifiedMap({
   onResolve,
   onBoundsChange,
   clickedPosition,
+  userLocation,
+  flyTo,
 }: UnifiedMapProps) {
   const outages = layers.outages ?? [];
   const substations = layers.substations ?? [];
@@ -437,6 +464,25 @@ export function UnifiedMap({
       <Legend visibleLayers={visibleLayers} />
       {onMapClick && <ClickHandler onClick={onMapClick} />}
       {onBoundsChange && <BoundsTracker onChange={onBoundsChange} />}
+      {flyTo && <FlyToPosition lat={flyTo.lat} lng={flyTo.lng} zoom={flyTo.zoom} />}
+
+      {/* ── User location ─────────────────────────────────── */}
+      {userLocation && (
+        <Marker
+          position={[userLocation.lat, userLocation.lng]}
+          icon={userLocationIcon}
+          zIndexOffset={900}
+        >
+          <Popup>
+            <div style={{ fontFamily: "sans-serif", fontSize: "13px", textAlign: "center", padding: "4px 0" }}>
+              <strong>A sua localização</strong>
+              <p style={{ margin: "4px 0 0", fontSize: "11px", color: "#64748b" }}>
+                {userLocation.lat.toFixed(5)}, {userLocation.lng.toFixed(5)}
+              </p>
+            </div>
+          </Popup>
+        </Marker>
+      )}
 
       {/* ── Clicked position pin ──────────────────────────── */}
       {clickedPosition && (
