@@ -446,20 +446,6 @@ function MapaPageInner() {
             flyTo={flyTo}
           />
 
-          {/* Locate me button — top-right */}
-          <button
-            onClick={handleLocate}
-            disabled={locating}
-            className={`absolute right-3 top-3 z-[1000] flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium shadow-md transition-colors ${
-              userLocation
-                ? "bg-blue-500 text-white"
-                : "bg-background/90 text-muted-foreground hover:bg-accent border border-border"
-            }`}
-          >
-            <LocateFixed className={`h-3.5 w-3.5 ${locating ? "animate-spin" : ""}`} />
-            {locating ? "A localizar..." : "A minha localização"}
-          </button>
-
           {/* Zoom gate message for poles layer */}
           {visibleLayers.has("poles") && mapZoom < 14 && (
             <div className="absolute bottom-20 left-1/2 z-[1000] -translate-x-1/2 rounded-lg bg-background/90 border border-border px-4 py-2 text-sm text-muted-foreground shadow-md backdrop-blur-sm">
@@ -467,53 +453,72 @@ function MapaPageInner() {
             </div>
           )}
 
-          {/* Layer toggle bar — top-left */}
-          <div className="absolute left-3 top-3 z-[1000] flex flex-wrap gap-1.5">
-            {ALL_LAYERS.map((layer) => {
-              const active = visibleLayers.has(layer);
-              const cfg = LAYER_LABELS[layer];
-              const Icon = cfg.icon;
-              return (
-                <button
-                  key={layer}
-                  onClick={() => toggleLayer(layer)}
-                  className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium shadow-md transition-colors ${
-                    active
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-background/90 text-muted-foreground hover:bg-accent border border-border"
-                  }`}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {cfg.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Operator filter — below layer bar, only when antennas visible */}
-          {visibleLayers.has("antennas") && (
-            <div className="absolute left-3 top-14 z-[1000] flex flex-wrap gap-1.5">
-              {ALL_OPERATORS.map((op) => {
-                const active = visibleOperators.has(op);
-                const color = OPERATOR_COLORS[op];
+          {/* Top controls container — stacks layer bar, operator filters, and locate button without overlap */}
+          <div className="absolute left-3 right-3 top-3 z-[1000] flex flex-col gap-1.5">
+            {/* Layer toggle bar */}
+            <div className="flex flex-wrap gap-1.5">
+              {ALL_LAYERS.map((layer) => {
+                const active = visibleLayers.has(layer);
+                const cfg = LAYER_LABELS[layer];
+                const Icon = cfg.icon;
                 return (
                   <button
-                    key={op}
-                    onClick={() => toggleOperator(op)}
-                    className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium shadow-md border transition-colors"
-                    style={{
-                      borderColor: active ? color : "var(--border)",
-                      background: active ? `${color}20` : "var(--background)",
-                      color: active ? color : "var(--muted-foreground)",
-                    }}
+                    key={layer}
+                    onClick={() => toggleLayer(layer)}
+                    className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium shadow-md transition-colors ${
+                      active
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-background/90 text-muted-foreground hover:bg-accent border border-border"
+                    }`}
                   >
-                    {active && <Check className="h-3 w-3" />}
-                    {op}
+                    <Icon className="h-3.5 w-3.5" />
+                    {cfg.label}
                   </button>
                 );
               })}
             </div>
-          )}
+
+            {/* Operator filter — only when antennas visible */}
+            {visibleLayers.has("antennas") && (
+              <div className="flex flex-wrap gap-1.5">
+                {ALL_OPERATORS.map((op) => {
+                  const active = visibleOperators.has(op);
+                  const color = OPERATOR_COLORS[op];
+                  return (
+                    <button
+                      key={op}
+                      onClick={() => toggleOperator(op)}
+                      className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium shadow-md border transition-colors backdrop-blur-sm"
+                      style={{
+                        borderColor: active ? color : "var(--border)",
+                        background: active ? `${color}22` : "var(--background)",
+                        color: active ? color : "var(--muted-foreground)",
+                      }}
+                    >
+                      {active && <Check className="h-3 w-3" />}
+                      {op}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Locate me button */}
+            <div className="flex">
+              <button
+                onClick={handleLocate}
+                disabled={locating}
+                className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium shadow-md transition-colors ${
+                  userLocation
+                    ? "bg-blue-500 text-white"
+                    : "bg-background/90 text-muted-foreground hover:bg-accent border border-border"
+                }`}
+              >
+                <LocateFixed className={`h-3.5 w-3.5 ${locating ? "animate-spin" : ""}`} />
+                {locating ? "A localizar..." : "A minha localização"}
+              </button>
+            </div>
+          </div>
 
           {/* Report panel */}
           <ReportPanel

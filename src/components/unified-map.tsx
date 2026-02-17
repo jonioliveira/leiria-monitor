@@ -6,6 +6,7 @@ import {
   CircleMarker,
   Marker,
   Popup,
+  ZoomControl,
   useMap,
   useMapEvents,
 } from "react-leaflet";
@@ -493,11 +494,13 @@ export function UnifiedMap({
       zoom={10}
       className="h-full w-full"
       scrollWheelZoom={true}
+      zoomControl={false}
     >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
       />
+      <ZoomControl position="bottomleft" />
       <Legend visibleLayers={visibleLayers} />
       {onMapClick && <ClickHandler onClick={onMapClick} />}
       {onBoundsChange && <BoundsTracker onChange={onBoundsChange} />}
