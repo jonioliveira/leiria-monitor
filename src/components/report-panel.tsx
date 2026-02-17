@@ -32,6 +32,8 @@ export function ReportPanel({ lat, lng, open, onClose, onSubmitted, infraContext
   const [submittedPriority, setSubmittedPriority] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [fallenPole, setFallenPole] = useState(false);
+  const [poleHasPower, setPoleHasPower] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const effectiveType = infraContext?.type ?? formType;
@@ -66,7 +68,15 @@ export function ReportPanel({ lat, lng, open, onClose, onSubmitted, infraContext
         body: JSON.stringify({
           type: effectiveType,
           operator: effectiveType.startsWith("telecom") ? effectiveOperator : null,
-          description: formDescription || null,
+          description: (() => {
+            const tag = fallenPole
+              ? (poleHasPower ? "[POSTE CAÍDO COM CORRENTE]" : "[POSTE CAÍDO]")
+              : null;
+            const desc = formDescription || null;
+            if (tag && desc) return `${tag} ${desc}`;
+            if (tag) return tag;
+            return desc;
+          })(),
           street: infraContext ? infraContext.label : (formStreet || null),
           lat,
           lng,
@@ -81,6 +91,8 @@ export function ReportPanel({ lat, lng, open, onClose, onSubmitted, infraContext
         setFormStreet("");
         setFormDescription("");
         setImageUrl(null);
+        setFallenPole(false);
+        setPoleHasPower(false);
         onSubmitted();
         setTimeout(() => {
           setSubmitted(false);
@@ -132,6 +144,10 @@ export function ReportPanel({ lat, lng, open, onClose, onSubmitted, infraContext
             infraContext={infraContext}
             formDescription={formDescription}
             setFormDescription={setFormDescription}
+            fallenPole={fallenPole}
+            setFallenPole={setFallenPole}
+            poleHasPower={poleHasPower}
+            setPoleHasPower={setPoleHasPower}
             submitting={submitting}
             onSubmit={handleSubmit}
             imageUrl={imageUrl}
@@ -199,6 +215,10 @@ export function ReportPanel({ lat, lng, open, onClose, onSubmitted, infraContext
             infraContext={infraContext}
             formDescription={formDescription}
             setFormDescription={setFormDescription}
+            fallenPole={fallenPole}
+            setFallenPole={setFallenPole}
+            poleHasPower={poleHasPower}
+            setPoleHasPower={setPoleHasPower}
             submitting={submitting}
             onSubmit={handleSubmit}
             imageUrl={imageUrl}
@@ -481,6 +501,10 @@ function InfraReportForm({
   infraContext,
   formDescription,
   setFormDescription,
+  fallenPole,
+  setFallenPole,
+  poleHasPower,
+  setPoleHasPower,
   submitting,
   onSubmit,
   imageUrl,
@@ -491,6 +515,10 @@ function InfraReportForm({
   infraContext: InfraContext;
   formDescription: string;
   setFormDescription: (d: string) => void;
+  fallenPole: boolean;
+  setFallenPole: (v: boolean) => void;
+  poleHasPower: boolean;
+  setPoleHasPower: (v: boolean) => void;
   submitting: boolean;
   onSubmit: (e: React.FormEvent) => void;
   imageUrl: string | null;
@@ -498,6 +526,9 @@ function InfraReportForm({
   fileRef: React.RefObject<HTMLInputElement | null>;
   onImageUpload: (file: File) => void;
 }) {
+  const label = infraContext.label.toLowerCase();
+  const isPoleElectricity = infraContext.type === "electricity" && (label.includes("poste") || label.includes("posto de transformação"));
+
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       {/* Infrastructure info */}
@@ -507,6 +538,46 @@ function InfraReportForm({
           <p key={i} className="text-xs text-muted-foreground">{d}</p>
         ))}
       </div>
+
+      {/* Fallen pole checkboxes for electricity poles */}
+      {isPoleElectricity && (
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={fallenPole}
+              onChange={(e) => {
+                setFallenPole(e.target.checked);
+                if (!e.target.checked) setPoleHasPower(false);
+              }}
+              className="h-4 w-4 rounded border-border accent-red-500"
+            />
+            <span className="text-sm font-medium text-foreground">Poste caído / partido</span>
+          </label>
+
+          {fallenPole && (
+            <>
+              <label className="flex items-center gap-2 cursor-pointer ml-6">
+                <input
+                  type="checkbox"
+                  checked={poleHasPower}
+                  onChange={(e) => setPoleHasPower(e.target.checked)}
+                  className="h-4 w-4 rounded border-border accent-red-500"
+                />
+                <span className="text-sm font-medium text-red-400">Poste com corrente elétrica</span>
+              </label>
+
+              {poleHasPower && (
+                <div className="rounded-lg border border-red-500/50 bg-red-500/10 p-3 ml-6">
+                  <p className="text-xs font-bold text-red-400 leading-snug">
+                    &#9888;&#65039; PERIGO: Não toque no poste nem nos cabos. Ligue 112.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* Description */}
       <div>

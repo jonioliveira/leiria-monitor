@@ -25,6 +25,15 @@ const URGENTE_KEYWORDS = [
   "acesso hospital",
   "ip",
   "ic",
+  "poste caído",
+  "poste caido",
+  "poste partido",
+  "fio caído",
+  "fio caido",
+  "cabo caído",
+  "cabo caido",
+  "risco elétrico",
+  "risco eletrico",
 ];
 
 const IMPORTANTE_KEYWORDS = [
@@ -89,7 +98,7 @@ export async function classifyPriority(
       system:
         "Classifica a prioridade deste reporte de infraestrutura danificada em Portugal. " +
         "Responde APENAS com uma palavra: urgente, importante ou normal.\n" +
-        "urgente = hospitais, centros de saúde, lares de idosos, escolas, creches, farmácias, bombas de água, equipamento médico\n" +
+        "urgente = hospitais, centros de saúde, lares de idosos, escolas, creches, farmácias, bombas de água, equipamento médico, postes caídos/partidos, fios/cabos caídos, risco elétrico\n" +
         "importante = empresas, comércio, abrigos, supermercados, edifícios públicos, bombeiros\n" +
         "normal = residências comuns",
       messages: [{ role: "user", content: input }],

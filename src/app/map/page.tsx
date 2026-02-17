@@ -156,7 +156,7 @@ function MapaPageInner() {
       (r.street?.toLowerCase().includes(q)) ||
       (r.description?.toLowerCase().includes(q)) ||
       (r.operator?.toLowerCase().includes(q)) ||
-      (r.type === "electricity" && "sem luz".includes(q)) ||
+      (r.type === "electricity" && ("sem luz".includes(q) || "poste caído".includes(q))) ||
       (r.type === "telecom_mobile" && "sem rede móvel".includes(q)) ||
       (r.type === "telecom_fixed" && "sem rede fixa".includes(q)) ||
       (r.type === "water" && "sem água".includes(q)) ||
@@ -626,7 +626,7 @@ function MapaPageInner() {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
                               <p className="text-sm font-medium text-foreground">
-                                {r.type === "electricity" ? "Sem luz" : r.type === "telecom_mobile" ? `Sem rede móvel${r.operator ? ` ${r.operator}` : ""}` : r.type === "telecom_fixed" ? `Sem rede fixa${r.operator ? ` ${r.operator}` : ""}` : r.type === "roads" ? "Estrada cortada" : "Sem água"}
+                                {r.type === "electricity" ? (r.description?.includes("[POSTE CAÍDO COM CORRENTE]") ? "Poste caído (com corrente)" : r.description?.includes("[POSTE CAÍDO]") ? "Poste caído" : "Sem luz") : r.type === "telecom_mobile" ? `Sem rede móvel${r.operator ? ` ${r.operator}` : ""}` : r.type === "telecom_fixed" ? `Sem rede fixa${r.operator ? ` ${r.operator}` : ""}` : r.type === "roads" ? "Estrada cortada" : "Sem água"}
                               </p>
                               {r.priority && r.priority !== "normal" && (
                                 <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold leading-none text-white ${
@@ -640,7 +640,7 @@ function MapaPageInner() {
                               <p className="text-xs text-muted-foreground mt-0.5">{r.street}</p>
                             )}
                             {r.description && (
-                              <p className="text-xs text-foreground/80 mt-1">{r.description}</p>
+                              <p className="text-xs text-foreground/80 mt-1">{r.description.replace(/\[POSTE CAÍDO(?:\s+COM CORRENTE)?\]\s*/g, "")}</p>
                             )}
                             {r.imageUrl && (
                               <img

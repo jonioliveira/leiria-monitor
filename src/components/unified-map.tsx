@@ -199,8 +199,12 @@ function getReportColor(type: string, operator: string | null): string {
   return "#8b5cf6";
 }
 
-function getReportLabel(type: string, operator: string | null): string {
-  if (type === "electricity") return "Sem luz";
+function getReportLabel(type: string, operator: string | null, description?: string | null): string {
+  if (type === "electricity") {
+    if (description?.includes("[POSTE CAÍDO COM CORRENTE]")) return "Poste caído (com corrente)";
+    if (description?.includes("[POSTE CAÍDO]")) return "Poste caído";
+    return "Sem luz";
+  }
   if (type === "roads") return "Estrada cortada";
   if (type === "telecom_mobile") return `Sem rede móvel${operator ? ` ${operator}` : ""}`;
   if (type === "telecom_fixed") return `Sem rede fixa${operator ? ` ${operator}` : ""}`;
@@ -949,7 +953,7 @@ export function UnifiedMap({
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
                     <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: color }} />
                     <strong style={{ fontSize: "14px" }}>
-                      {getReportLabel(r.type, r.operator)}
+                      {getReportLabel(r.type, r.operator, r.description)}
                     </strong>
                   </div>
                   {r.priority && r.priority !== "normal" && (
@@ -974,7 +978,7 @@ export function UnifiedMap({
                       Freguesia: {r.parish}
                     </p>
                   )}
-                  {r.description && <p style={{ margin: "4px 0" }}>{r.description}</p>}
+                  {r.description && <p style={{ margin: "4px 0" }}>{r.description.replace(/\[POSTE CAÍDO(?:\s+COM CORRENTE)?\]\s*/g, "")}</p>}
                   {r.imageUrl && (
                     <a href={r.imageUrl} target="_blank" rel="noopener noreferrer" style={{ display: "block", margin: "6px 0" }}>
                       <img
