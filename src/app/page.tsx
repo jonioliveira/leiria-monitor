@@ -196,7 +196,7 @@ export default function HomePage() {
             <CardContent>
               <p className="text-2xl font-bold">{data?.summary.electricity.totalOutages ?? "—"}</p>
               <p className="text-xs text-muted-foreground">
-                Reportes · {data?.summary.electricity.municipalitiesAffected ?? 0} concelhos
+                Reportes · {data?.summary.electricity.municipalitiesAffected ?? 0} freguesias
               </p>
               {(data?.summary.electricity.substationsTotal ?? 0) > 0 && (
                 <p className="mt-1 text-xs text-muted-foreground">

@@ -6,8 +6,9 @@ import {
   procivOccurrences,
   procivWarnings,
   eredesScheduledWork,
+  userReports,
 } from "@/db/schema";
-import { sql } from "drizzle-orm";
+import { sql, eq, and, gte } from "drizzle-orm";
 import { EREDES_BASE, EREDES_SUBSTATION_DATASET } from "@/lib/constants";
 
 export const revalidate = 60;
@@ -46,7 +47,10 @@ export async function GET() {
       return { total, active };
     })().catch(() => ({ total: 0, active: 0 }));
 
-    const [outages, warnings, occurrences, scheduledWork, populationWarnings, substationCount] =
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const [outages, warnings, occurrences, scheduledWork, populationWarnings, substationCount, electricityReports] =
       await Promise.all([
         eredesEnabled ? db.select().from(eredesOutages) : Promise.resolve([]),
         db.select().from(ipmaWarnings),
@@ -54,16 +58,28 @@ export async function GET() {
         eredesEnabled ? db.select().from(eredesScheduledWork) : Promise.resolve([]),
         db.select().from(procivWarnings),
         substationPromise,
+        db.select({ parish: userReports.parish })
+          .from(userReports)
+          .where(
+            and(
+              eq(userReports.type, "electricity"),
+              eq(userReports.resolved, false),
+              gte(userReports.createdAt, sevenDaysAgo)
+            )
+          ),
       ]);
 
     const totalOutages = outages.reduce((sum, o) => sum + o.outageCount, 0);
 
     // Derive status levels
     let electricityStatus: "critical" | "warning" | "ok" | "unknown" = "unknown";
-    if (eredesEnabled && outages.length > 0) {
-      electricityStatus = totalOutages > 5 ? "critical" : totalOutages > 0 ? "warning" : "ok";
-    } else if (substationCount.total > 0) {
-      electricityStatus = substationCount.active < substationCount.total ? "warning" : "ok";
+    const reportCount = electricityReports.length;
+    if (reportCount > 5 || totalOutages > 5) {
+      electricityStatus = "critical";
+    } else if (reportCount > 0 || totalOutages > 0 || (substationCount.total > 0 && substationCount.active < substationCount.total)) {
+      electricityStatus = "warning";
+    } else if (substationCount.total > 0 || eredesEnabled) {
+      electricityStatus = "ok";
     }
 
     let weatherStatus: "critical" | "warning" | "ok" | "unknown" = "unknown";
@@ -111,8 +127,8 @@ export async function GET() {
       summary: {
         electricity: {
           status: electricityStatus,
-          totalOutages,
-          municipalitiesAffected: outages.filter((o) => o.outageCount > 0).length,
+          totalOutages: electricityReports.length,
+          municipalitiesAffected: new Set(electricityReports.map((r) => r.parish).filter(Boolean)).size,
           substationsTotal: substationCount.total,
           substationsActive: substationCount.active,
         },
