@@ -6,10 +6,12 @@ import dynamic from "next/dynamic";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ReportPanel } from "@/components/report-panel";
 import type { InfraContext } from "@/components/report-panel";
+import Link from "next/link";
 import {
   MapPin, Radio, Activity, MessageSquarePlus, Check, LocateFixed,
-  Search, Zap, Wifi, Globe, Droplets, Construction, ThumbsUp, CheckCircle, Map, List, Share2,
+  Search, Zap, Wifi, Globe, Droplets, Construction, ThumbsUp, CheckCircle, Map, List, Share2, ChevronRight,
 } from "lucide-react";
+import { slugify } from "@/lib/slug-utils";
 import type {
   TransformerMarker,
   AntennaFeature,
@@ -582,11 +584,15 @@ function MapaPageInner() {
               groupedReports.map(({ concelho, parishes, total }) => (
                 <div key={concelho}>
                   {/* Concelho header */}
-                  <div className="sticky top-0 z-10 border-b border-border bg-muted/50 px-4 py-1.5 backdrop-blur-sm">
+                  <Link
+                    href={`/council/${slugify(concelho)}`}
+                    className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-muted/50 px-4 py-1.5 backdrop-blur-sm transition-colors hover:bg-muted/80"
+                  >
                     <p className="text-xs font-semibold text-muted-foreground">
                       {concelho} ({total})
                     </p>
-                  </div>
+                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Link>
 
                   {parishes.map(([parish, items]) => (
                     <div key={`${concelho}-${parish}`}>

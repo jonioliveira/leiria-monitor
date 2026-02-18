@@ -17,7 +17,10 @@ import {
   Satellite,
   Map,
   Signal,
+  Building2,
+  ChevronRight,
 } from "lucide-react";
+import { slugify } from "@/lib/slug-utils";
 
 /* ── Types ─────────────────────────────────────────────────── */
 
@@ -62,6 +65,10 @@ interface DashboardData {
     summary: string;
     detailUrl: string | null;
     fetchedAt: string;
+  }[];
+  concelhoBreakdown?: {
+    concelho: string;
+    reports: number;
   }[];
 }
 
@@ -291,6 +298,46 @@ export default function HomePage() {
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {data!.recentWarnings.map((w, i) => (
               <WarningBadge key={i} level={w.level} type={w.type} text={w.text} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Concelho grid */}
+      {data?.concelhoBreakdown && data.concelhoBreakdown.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Building2 className="h-4 w-4 text-primary" />
+            <h2 className="text-sm font-semibold text-foreground">
+              Explorar por Concelho
+            </h2>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {data.concelhoBreakdown.map((c) => (
+              <Link key={c.concelho} href={`/council/${slugify(c.concelho)}`}>
+                <Card className="cursor-pointer transition-colors hover:bg-accent/50 h-full overflow-hidden">
+                  <CardContent className="flex items-center gap-2.5 py-3">
+                    <span
+                      className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                        c.reports > 5
+                          ? "bg-red-500"
+                          : c.reports > 0
+                          ? "bg-amber-400"
+                          : "bg-emerald-400"
+                      }`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-foreground truncate">
+                        {c.concelho}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {c.reports} {c.reports === 1 ? "reporte" : "reportes"}
+                      </p>
+                    </div>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  </CardContent>
+                </Card>
+              </Link>
             ))}
           </div>
         </div>

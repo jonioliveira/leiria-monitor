@@ -41,3 +41,24 @@ export function resolveParish(
 
   return null;
 }
+
+export function getAllConcelhos(): string[] {
+  const fc = getGeoJSON();
+  const set = new Set<string>();
+  for (const feature of fc.features) {
+    set.add(feature.properties.Concelho);
+  }
+  return Array.from(set).sort();
+}
+
+export function getParishesByConcelho(concelho: string): string[] {
+  const fc = getGeoJSON();
+  const upper = concelho.toUpperCase();
+  const parishes: string[] = [];
+  for (const feature of fc.features) {
+    if (feature.properties.Concelho.toUpperCase() === upper) {
+      parishes.push(feature.properties.Freguesia);
+    }
+  }
+  return parishes.sort();
+}

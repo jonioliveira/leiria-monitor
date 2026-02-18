@@ -8,8 +8,9 @@ import {
   eredesScheduledWork,
   userReports,
 } from "@/db/schema";
-import { sql, eq, and, gte } from "drizzle-orm";
+import { sql, eq, and, gte, desc } from "drizzle-orm";
 import { EREDES_BASE, EREDES_SUBSTATION_DATASET } from "@/lib/constants";
+import { getAllConcelhos, getParishesByConcelho } from "@/lib/parish-lookup";
 
 export const revalidate = 60;
 
@@ -50,7 +51,7 @@ export async function GET() {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    const [outages, warnings, occurrences, scheduledWork, populationWarnings, substationCount, electricityReports] =
+    const [outages, warnings, occurrences, scheduledWork, populationWarnings, substationCount, electricityReports, allActiveReports] =
       await Promise.all([
         eredesEnabled ? db.select().from(eredesOutages) : Promise.resolve([]),
         db.select().from(ipmaWarnings),
@@ -63,6 +64,14 @@ export async function GET() {
           .where(
             and(
               eq(userReports.type, "electricity"),
+              eq(userReports.resolved, false),
+              gte(userReports.createdAt, sevenDaysAgo)
+            )
+          ),
+        db.select({ parish: userReports.parish })
+          .from(userReports)
+          .where(
+            and(
               eq(userReports.resolved, false),
               gte(userReports.createdAt, sevenDaysAgo)
             )
@@ -121,6 +130,28 @@ export async function GET() {
       };
     }
 
+    // Build concelho breakdown: map each parish to its concelho, then count
+    const concelhoList = getAllConcelhos();
+    const parishToConcelhoMap = new Map<string, string>();
+    for (const conc of concelhoList) {
+      for (const p of getParishesByConcelho(conc)) {
+        parishToConcelhoMap.set(p.toUpperCase(), conc);
+      }
+    }
+
+    const concelhoCountMap = new Map<string, number>();
+    for (const r of allActiveReports) {
+      if (!r.parish) continue;
+      const conc = parishToConcelhoMap.get(r.parish.toUpperCase());
+      if (conc) {
+        concelhoCountMap.set(conc, (concelhoCountMap.get(conc) ?? 0) + 1);
+      }
+    }
+
+    const concelhoBreakdown = concelhoList
+      .map((c) => ({ concelho: c, reports: concelhoCountMap.get(c) ?? 0 }))
+      .sort((a, b) => b.reports - a.reports);
+
     return NextResponse.json({
       success: true,
       timestamp: new Date().toISOString(),
@@ -163,6 +194,7 @@ export async function GET() {
         detailUrl: w.detailUrl,
         fetchedAt: w.fetchedAt.toISOString(),
       })),
+      concelhoBreakdown,
     });
   } catch (error: any) {
     return NextResponse.json(

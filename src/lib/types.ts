@@ -267,6 +267,36 @@ export interface TransformerMarker {
   municipality: string;
 }
 
+// Per-concelho / per-parish dashboard
+export interface AreaDashboardData {
+  success: boolean;
+  timestamp: string;
+  concelho: string;
+  parish: string | null;
+  reports: {
+    total: number;
+    byType: Record<string, number>;
+    parishes: string[];
+  };
+  recentReports: {
+    id: number;
+    type: string;
+    operator: string | null;
+    description: string | null;
+    street: string | null;
+    parish: string | null;
+    lat: number;
+    lng: number;
+    upvotes: number;
+    priority: string;
+    lastUpvotedAt: string | null;
+    imageUrl: string | null;
+    createdAt: string;
+  }[];
+  transformers: { total: number; avgUsage: string | null } | null;
+  parishes: string[];
+}
+
 export interface CalamityInfo {
   status: string;
   extended_until: string;
