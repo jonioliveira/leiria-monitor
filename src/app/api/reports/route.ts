@@ -169,9 +169,15 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (action === "resolve") {
+      const { powerSource } = body;
+      const updateFields: { resolved: true; powerSource?: string } = { resolved: true };
+      if (powerSource === "grid" || powerSource === "generator") {
+        updateFields.powerSource = powerSource;
+      }
+
       await db
         .update(userReports)
-        .set({ resolved: true })
+        .set(updateFields)
         .where(eq(userReports.id, id));
 
       return NextResponse.json({ success: true });

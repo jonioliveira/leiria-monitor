@@ -18,6 +18,10 @@ import {
   ThumbsUp,
   MapPin,
   RefreshCw,
+  Plug,
+  Fuel,
+  ZapOff,
+  HelpCircle,
 } from "lucide-react";
 import { parseConcelhoSlug, slugify } from "@/lib/slug-utils";
 import type { AreaDashboardData } from "@/lib/types";
@@ -213,6 +217,58 @@ function ConcelhoPageInner({ slug }: { slug: string }) {
         })}
       </div>
 
+      {/* Power source summary */}
+      {data?.powerSources && (
+        <Card>
+          <CardContent className="py-4">
+            <h2 className="mb-3 text-sm font-semibold text-foreground">
+              Fonte de Energia
+            </h2>
+            <div className="flex flex-wrap gap-5">
+              <div className="flex items-center gap-2">
+                <div className="rounded-full bg-emerald-500/10 p-2">
+                  <Plug className="h-4 w-4 text-emerald-400" />
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-foreground">{data.powerSources.grid}</p>
+                  <p className="text-[11px] text-muted-foreground">Rede Elétrica</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="rounded-full bg-amber-500/10 p-2">
+                  <Fuel className="h-4 w-4 text-amber-400" />
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-foreground">{data.powerSources.generator}</p>
+                  <p className="text-[11px] text-muted-foreground">Gerador</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="rounded-full bg-red-500/10 p-2">
+                  <ZapOff className="h-4 w-4 text-red-400" />
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-foreground">{data.powerSources.noGrid}</p>
+                  <p className="text-[11px] text-muted-foreground">Sem rede</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="rounded-full bg-zinc-500/10 p-2">
+                  <HelpCircle className="h-4 w-4 text-zinc-400" />
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-foreground">{data.powerSources.unknown}</p>
+                  <p className="text-[11px] text-muted-foreground">Desconhecido</p>
+                </div>
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">
+              E-REDES: {data.powerSources.municipalityOutages} avaria{data.powerSources.municipalityOutages !== 1 ? "s" : ""} no concelho
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Parish grid (concelho view only) */}
       {!parish && data?.parishes && data.parishes.length > 0 && (
         <div>
@@ -222,6 +278,7 @@ function ConcelhoPageInner({ slug }: { slug: string }) {
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
             {data.parishes.map((p) => {
               const hasReports = data.reports.parishes.includes(p);
+              const parishPower = data.powerSources?.parishes.find((ps) => ps.parish === p);
               return (
                 <button
                   key={p}
@@ -236,6 +293,25 @@ function ConcelhoPageInner({ slug }: { slug: string }) {
                     }`}
                   />
                   <span className="truncate text-foreground">{p}</span>
+                  {parishPower && (
+                    parishPower.source === "grid" ? (
+                      <span className="shrink-0" title="Rede Elétrica">
+                        <Plug className="h-3.5 w-3.5 text-emerald-400" />
+                      </span>
+                    ) : parishPower.source === "generator" ? (
+                      <span className="shrink-0" title="Gerador">
+                        <Fuel className="h-3.5 w-3.5 text-amber-400" />
+                      </span>
+                    ) : parishPower.source === "no_power" ? (
+                      <span className="shrink-0" title="Sem rede">
+                        <ZapOff className="h-3.5 w-3.5 text-red-400" />
+                      </span>
+                    ) : (
+                      <span className="shrink-0" title="Desconhecido">
+                        <HelpCircle className="h-3.5 w-3.5 text-zinc-400" />
+                      </span>
+                    )
+                  )}
                   <ChevronRight className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 </button>
               );

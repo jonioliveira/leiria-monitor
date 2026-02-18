@@ -124,6 +124,9 @@ function MapaPageInner() {
   const [reportLng, setReportLng] = useState<number | null>(null);
   const [infraContext, setInfraContext] = useState<InfraContext | null>(null);
 
+  // Power source resolve prompt
+  const [resolvingId, setResolvingId] = useState<number | null>(null);
+
   // Report list state
   const [listSearch, setListSearch] = useState("");
 
@@ -357,14 +360,17 @@ function MapaPageInner() {
     } catch { /* silent */ }
   }
 
-  async function handleResolve(id: number) {
+  async function handleResolve(id: number, powerSource?: "grid" | "generator") {
     try {
+      const payload: { id: number; action: string; powerSource?: string } = { id, action: "resolve" };
+      if (powerSource) payload.powerSource = powerSource;
       await fetch("/api/reports", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, action: "resolve" }),
+        body: JSON.stringify(payload),
       });
       setReports((prev) => prev.filter((r) => r.id !== id));
+      setResolvingId(null);
     } catch { /* silent */ }
   }
 
@@ -666,26 +672,61 @@ function MapaPageInner() {
 
                           {/* Actions */}
                           <div className="flex shrink-0 flex-col gap-1 sm:flex-row">
-                            <button
-                              onClick={() => handleUpvote(r.id)}
-                              className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-blue-400 transition-colors hover:bg-blue-400/10"
-                            >
-                              <ThumbsUp className="h-3.5 w-3.5" />
-                              <span className="hidden sm:inline">Confirmo</span>
-                            </button>
-                            <button
-                              onClick={() => handleResolve(r.id)}
-                              className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-emerald-400 transition-colors hover:bg-emerald-400/10"
-                            >
-                              <CheckCircle className="h-3.5 w-3.5" />
-                              <span className="hidden sm:inline">Resolvido</span>
-                            </button>
-                            <button
-                              onClick={() => handleShare(r.id)}
-                              className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent"
-                            >
-                              <Share2 className="h-3.5 w-3.5" />
-                            </button>
+                            {resolvingId === r.id ? (
+                              /* Power source prompt for electricity reports */
+                              <div className="flex flex-col gap-1">
+                                <p className="text-[10px] text-muted-foreground text-center">Como voltou a energia?</p>
+                                <button
+                                  onClick={() => handleResolve(r.id, "grid")}
+                                  className="flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-medium text-emerald-400 transition-colors hover:bg-emerald-500/20"
+                                >
+                                  <Zap className="h-3.5 w-3.5" />
+                                  Rede Elétrica
+                                </button>
+                                <button
+                                  onClick={() => handleResolve(r.id, "generator")}
+                                  className="flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-400 transition-colors hover:bg-amber-500/20"
+                                >
+                                  <Activity className="h-3.5 w-3.5" />
+                                  Gerador
+                                </button>
+                                <button
+                                  onClick={() => setResolvingId(null)}
+                                  className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => handleUpvote(r.id)}
+                                  className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-blue-400 transition-colors hover:bg-blue-400/10"
+                                >
+                                  <ThumbsUp className="h-3.5 w-3.5" />
+                                  <span className="hidden sm:inline">Confirmo</span>
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (r.type === "electricity") {
+                                      setResolvingId(r.id);
+                                    } else {
+                                      handleResolve(r.id);
+                                    }
+                                  }}
+                                  className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-emerald-400 transition-colors hover:bg-emerald-400/10"
+                                >
+                                  <CheckCircle className="h-3.5 w-3.5" />
+                                  <span className="hidden sm:inline">Resolvido</span>
+                                </button>
+                                <button
+                                  onClick={() => handleShare(r.id)}
+                                  className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent"
+                                >
+                                  <Share2 className="h-3.5 w-3.5" />
+                                </button>
+                              </>
+                            )}
                           </div>
                         </div>
                       ))}

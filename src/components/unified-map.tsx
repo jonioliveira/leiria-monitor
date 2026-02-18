@@ -637,6 +637,7 @@ export function UnifiedMap({
       {/* ── Transformers (PTD) layer — clustered ──────────── */}
       {visibleLayers.has("transformers") && transformers.length > 0 && (
         <MarkerClusterGroup
+          key={`ptd-${transformers.length}`}
           chunkedLoading
           maxClusterRadius={50}
           spiderfyOnMaxZoom
@@ -762,6 +763,7 @@ export function UnifiedMap({
       {/* ── Antennas layer — clustered ────────────────────── */}
       {visibleLayers.has("antennas") && filteredAntennas.length > 0 && (
         <MarkerClusterGroup
+          key={`ant-${filteredAntennas.length}`}
           chunkedLoading
           maxClusterRadius={50}
           spiderfyOnMaxZoom
@@ -1071,6 +1073,7 @@ export function UnifiedMap({
       {/* ── Poles (BT) layer — clustered, zoom gated ─────── */}
       {visibleLayers.has("poles") && poles.length > 0 && (
         <MarkerClusterGroup
+          key={`pole-${poles.length}`}
           chunkedLoading
           maxClusterRadius={60}
           disableClusteringAtZoom={18}

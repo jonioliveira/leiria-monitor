@@ -292,8 +292,17 @@ export interface AreaDashboardData {
     lastUpvotedAt: string | null;
     imageUrl: string | null;
     createdAt: string;
+    powerSource?: string | null;
   }[];
   transformers: { total: number; avgUsage: string | null } | null;
+  powerSources: {
+    grid: number;
+    generator: number;
+    noGrid: number;
+    unknown: number;
+    municipalityOutages: number;
+    parishes: { parish: string; source: "grid" | "generator" | "no_power" | "unknown" }[];
+  };
   parishes: string[];
 }
 
