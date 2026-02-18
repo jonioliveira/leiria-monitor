@@ -122,6 +122,7 @@ export const userReports = pgTable("user_reports", {
   lng: real("lng").notNull(),
   priority: text("priority").default("normal").notNull(), // "urgente" | "importante" | "normal"
   resolved: boolean("resolved").default(false).notNull(),
+  powerSource: text("power_source"), // "grid" | "generator" | null
   upvotes: integer("upvotes").default(1).notNull(),
   lastUpvotedAt: timestamp("last_upvoted_at", { withTimezone: true }),
   imageUrl: text("image_url"),
