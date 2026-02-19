@@ -1,33 +1,31 @@
-When Storm Kristin tore through my hometown on January 28th, I watched power lines fall, water systems fail, and my neighbors scrambling for reliable information about when services would return.
+When Storm Kristin tore through my hometown on January 28th, I watched power lines fall, water systems fail, and my neighbors scrambling for reliable information about what was broken and where.
 
 As a developer from Leiria, I knew I could help.
 
-So I built **Rede Sentinela** (redesentinela.com) — a real-time infrastructure recovery platform monitoring 15 municipalities across the Leiria district.
+So I built **Rede Sentinela** (redesentinela.com) — a free outage reporting system for the 15 municipalities across the Leiria district.
 
 **What it does:**
 
-→ Real-time dashboard tracking 5 critical sectors: electricity outages (E-REDES data), weather alerts (IPMA), telecom coverage (MEO/NOS/Vodafone/DIGI), water services (SMAS), and emergency response (ANEPC)
+→ Citizens report infrastructure problems — electricity outages, communication failures, water supply issues, and road cuts — with geotagged photos
 
-→ Interactive map with 4 infrastructure layers: power transformers, telecom antennas, BT poles, and crowdsourced damage reports from citizens
+→ Reports are aggregated into dashboards per council and per parish, giving local authorities a clear picture of what's happening on the ground
 
-→ AI-powered triage using Claude Haiku that auto-classifies citizen reports by priority — hospitals and schools flagged urgent, businesses important, residential areas normal
+→ Interactive map with infrastructure layers: power substations, telecom antennas, BT poles, and all citizen reports
 
-→ Satellite damage assessment integrated from Copernicus Emergency Management Service (EMSR861) to verify ground reports
+→ PWA that installs on phones for easy access in the field
 
-→ Recovery tracking with per-substation electricity load charts and per-municipality telecom heatmaps, so communities know exactly when their area will be restored
+**The tech:** Next.js 16, TypeScript, PostgreSQL, Leaflet maps. Free and open.
 
-→ PWA that installs on phones and works offline when connectivity drops
+This isn't about a flashy product launch. It's about giving communities a simple way to say "this is broken here" and giving local authorities the visibility they need to coordinate recovery.
 
-**The tech:** Next.js 16, TypeScript, PostgreSQL, Leaflet maps, integrating 7+ public data sources. All open data, no authentication barriers.
+Data is updated daily. The platform is completely free.
 
-This isn't about a flashy product launch. It's about civic tech that matters — using open data and AI to help communities navigate crisis and recovery with clarity.
+If you're a municipal council, parish council, or community org in the Leiria district — this was built for you. Reach out.
 
-If you're a municipal council, emergency service, or community org dealing with infrastructure recovery, reach out. This model can scale.
-
-And if you know someone in the Leiria district still waiting for services to return, share this. Information is infrastructure too.
+And if you know someone still dealing with storm damage, share this. Reporting problems is the first step to fixing them.
 
 **→ redesentinela.com**
 
 Made with love from Leiria 🇵🇹
 
-#CivicTech #OpenData #DisasterRecovery #AIForGood #NextJS
+#CivicTech #OpenData #DisasterRecovery #Leiria #Portugal
