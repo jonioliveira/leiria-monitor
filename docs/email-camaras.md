@@ -1,3 +1,27 @@
+## Contactos das Câmaras Municipais do Distrito de Leiria
+
+| Município | Email | Website | Telefone |
+|---|---|---|---|
+| Leiria | cmleiria@cm-leiria.pt | cm-leiria.pt | 244 839 500 |
+| Pombal | geral@cm-pombal.pt | cm-pombal.pt | 236 210 500 |
+| Marinha Grande | geral@cm-mgrande.pt | cm-mgrande.pt | 244 573 300 |
+| Alcobaça | cmalcobaca@cm-alcobaca.pt | cm-alcobaca.pt | 262 580 800 |
+| Batalha | geral@cm-batalha.pt | cm-batalha.pt | 244 769 110 |
+| Porto de Mós | geral@municipio-portodemos.pt | municipio-portodemos.pt | 244 499 600 |
+| Nazaré | geral@cm-nazare.pt | cm-nazare.pt | 262 550 010 |
+| Ansião | geral@cm-ansiao.pt | cm-ansiao.pt | 236 670 200 |
+| Alvaiázere | geral@cm-alvaiazere.pt | cm-alvaiazere.pt | 236 650 600 |
+| Castanheira de Pera | camara@cm-castanheiradepera.pt | cm-castanheiradepera.pt | 236 430 280 |
+| Figueiró dos Vinhos | secretaria@cm-figueirodosvinhos.pt | cm-figueirodosvinhos.pt | 236 559 550 |
+| Pedrógão Grande | geral@cm-pedrogaogrande.pt | cm-pedrogaogrande.pt | 236 480 150 |
+| Ourém | geral@mail.cm-ourem.pt | ourem.pt | 249 540 900 |
+| Caldas da Rainha | geral@mcr.pt | mcr.pt | 262 240 000 |
+| Peniche | cmpeniche@cm-peniche.pt | cm-peniche.pt | 262 780 100 |
+
+---
+
+## Template de Email
+
 **Assunto: Plataforma Rede Sentinela – Sistema de Reporte de Avarias para Apoio à Recuperação Pós-Tempestade Kristin**
 
 ---
