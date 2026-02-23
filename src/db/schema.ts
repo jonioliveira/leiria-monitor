@@ -113,7 +113,7 @@ export const btPoles = pgTable("bt_poles", {
 
 export const userReports = pgTable("user_reports", {
   id: serial("id").primaryKey(),
-  type: text("type").notNull(), // "electricity" | "telecom_mobile" | "telecom_fixed" | "water" | "roads"
+  type: text("type").notNull(), // ReportType: electricity | telecom_mobile | telecom_fixed | water | water_leak | roads | roads_tree | roads_damage | other_garbage | other
   operator: text("operator"), // null for electricity/water/roads, "MEO"/"NOS"/"Vodafone"/"DIGI" for telecom types
   description: text("description"),
   street: text("street"),
