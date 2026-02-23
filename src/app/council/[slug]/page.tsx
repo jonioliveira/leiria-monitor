@@ -18,6 +18,11 @@ import {
   ThumbsUp,
   MapPin,
   RefreshCw,
+  TreePine,
+  AlertTriangle,
+  Waves,
+  Trash2,
+  HelpCircle,
 } from "lucide-react";
 import { parseConcelhoSlug, slugify } from "@/lib/slug-utils";
 import type { AreaDashboardData } from "@/lib/types";
@@ -27,7 +32,12 @@ const TYPE_CONFIG: Record<string, { label: string; icon: typeof Zap; color: stri
   telecom_mobile: { label: "Rede Móvel", icon: Wifi, color: "text-blue-400" },
   telecom_fixed: { label: "Rede Fixa", icon: Globe, color: "text-indigo-400" },
   water: { label: "Água", icon: Droplets, color: "text-cyan-400" },
+  water_leak: { label: "Rotura de Conduta", icon: Waves, color: "text-cyan-400" },
   roads: { label: "Estradas", icon: Construction, color: "text-orange-400" },
+  roads_tree: { label: "Árvore na Via", icon: TreePine, color: "text-orange-400" },
+  roads_damage: { label: "Dano na Estrada", icon: AlertTriangle, color: "text-orange-400" },
+  other_garbage: { label: "Recolha de Lixo", icon: Trash2, color: "text-purple-400" },
+  other: { label: "Outro Problema", icon: HelpCircle, color: "text-purple-400" },
 };
 
 function timeAgo(dateStr: string): string {
@@ -280,9 +290,19 @@ function ConcelhoPageInner({ slug }: { slug: string }) {
                             ? `Sem rede móvel${r.operator ? ` ${r.operator}` : ""}`
                             : r.type === "telecom_fixed"
                             ? `Sem rede fixa${r.operator ? ` ${r.operator}` : ""}`
+                            : r.type === "water_leak"
+                            ? "Rotura de conduta"
+                            : r.type === "water"
+                            ? "Sem água"
+                            : r.type === "roads_tree"
+                            ? "Árvore na via"
+                            : r.type === "roads_damage"
+                            ? "Dano na estrada"
                             : r.type === "roads"
                             ? "Estrada cortada"
-                            : "Sem água"}
+                            : r.type === "other_garbage"
+                            ? "Recolha de lixo"
+                            : TYPE_CONFIG[r.type]?.label ?? "Outro problema"}
                         </p>
                         {r.priority && r.priority !== "normal" && (
                           <span

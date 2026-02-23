@@ -1,14 +1,67 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Zap, Wifi, Globe, Droplets, Construction, X, ThumbsUp, MapPin, Camera, Loader2 } from "lucide-react";
+import {
+  Zap, Wifi, Globe, Droplets, Construction, X, ThumbsUp, MapPin, Camera, Loader2,
+  Smartphone, HelpCircle, TreePine, AlertTriangle, Waves, Trash2,
+} from "lucide-react";
 
-type ReportType = "electricity" | "telecom_mobile" | "telecom_fixed" | "water" | "roads";
+type ReportCategory = "electricity" | "telecom" | "roads" | "water" | "other";
+export type ReportType =
+  | "electricity"
+  | "telecom_mobile"
+  | "telecom_fixed"
+  | "water"
+  | "water_leak"
+  | "roads"
+  | "roads_tree"
+  | "roads_damage"
+  | "other_garbage"
+  | "other";
+
 const OPERATORS = ["MEO", "NOS", "Vodafone", "DIGI"] as const;
+
+type CatConfig = { id: ReportCategory; label: string; icon: typeof Zap; activeClass: string };
+const CATEGORY_CONFIG: CatConfig[] = [
+  { id: "electricity", label: "Luz", icon: Zap, activeClass: "border-amber-400/50 bg-amber-400/10 text-amber-400" },
+  { id: "telecom", label: "Telecom", icon: Wifi, activeClass: "border-blue-400/50 bg-blue-400/10 text-blue-400" },
+  { id: "roads", label: "Estrada", icon: Construction, activeClass: "border-orange-400/50 bg-orange-400/10 text-orange-400" },
+  { id: "water", label: "Água", icon: Droplets, activeClass: "border-cyan-400/50 bg-cyan-400/10 text-cyan-400" },
+  { id: "other", label: "Outro", icon: HelpCircle, activeClass: "border-purple-400/50 bg-purple-400/10 text-purple-400" },
+];
+
+const SUBCATEGORY_CONFIG: Record<ReportCategory, { type: ReportType; label: string; icon: typeof Zap }[]> = {
+  electricity: [],
+  telecom: [
+    { type: "telecom_mobile", label: "Rede Móvel", icon: Smartphone },
+    { type: "telecom_fixed", label: "Rede Fixa", icon: Globe },
+  ],
+  roads: [
+    { type: "roads", label: "Cortada", icon: Construction },
+    { type: "roads_tree", label: "Árvore", icon: TreePine },
+    { type: "roads_damage", label: "Dano", icon: AlertTriangle },
+  ],
+  water: [
+    { type: "water", label: "Sem água", icon: Droplets },
+    { type: "water_leak", label: "Rotura", icon: Waves },
+  ],
+  other: [
+    { type: "other_garbage", label: "Lixo", icon: Trash2 },
+    { type: "other", label: "Outro", icon: HelpCircle },
+  ],
+};
+
+const CATEGORY_DEFAULT_TYPE: Record<ReportCategory, ReportType> = {
+  electricity: "electricity",
+  telecom: "telecom_mobile",
+  roads: "roads",
+  water: "water",
+  other: "other_garbage",
+};
 
 export interface InfraContext {
   label: string;
-  type: ReportType;
+  type: "electricity" | "telecom_mobile" | "telecom_fixed" | "water" | "roads";
   operator: string | null;
   details: string[];
 }
@@ -23,6 +76,7 @@ interface ReportPanelProps {
 }
 
 export function ReportPanel({ lat, lng, open, onClose, onSubmitted, infraContext }: ReportPanelProps) {
+  const [formCategory, setFormCategory] = useState<ReportCategory | null>(null);
   const [formType, setFormType] = useState<ReportType>("electricity");
   const [formOperator, setFormOperator] = useState<string>("MEO");
   const [formStreet, setFormStreet] = useState("");
@@ -88,6 +142,7 @@ export function ReportPanel({ lat, lng, open, onClose, onSubmitted, infraContext
         const data = await res.json();
         setSubmittedPriority(data.priority ?? "normal");
         setSubmitted(true);
+        setFormCategory(null);
         setFormStreet("");
         setFormDescription("");
         setImageUrl(null);
@@ -159,6 +214,8 @@ export function ReportPanel({ lat, lng, open, onClose, onSubmitted, infraContext
           <ReportForm
             lat={lat}
             lng={lng}
+            formCategory={formCategory}
+            setFormCategory={setFormCategory}
             formType={formType}
             setFormType={setFormType}
             formOperator={formOperator}
@@ -230,6 +287,8 @@ export function ReportPanel({ lat, lng, open, onClose, onSubmitted, infraContext
           <ReportForm
             lat={lat}
             lng={lng}
+            formCategory={formCategory}
+            setFormCategory={setFormCategory}
             formType={formType}
             setFormType={setFormType}
             formOperator={formOperator}
@@ -316,6 +375,8 @@ function PhotoUpload({
 function ReportForm({
   lat,
   lng,
+  formCategory,
+  setFormCategory,
   formType,
   setFormType,
   formOperator,
@@ -333,6 +394,8 @@ function ReportForm({
 }: {
   lat: number | null;
   lng: number | null;
+  formCategory: ReportCategory | null;
+  setFormCategory: (c: ReportCategory | null) => void;
   formType: ReportType;
   setFormType: (t: ReportType) => void;
   formOperator: string;
@@ -348,6 +411,14 @@ function ReportForm({
   fileRef: React.RefObject<HTMLInputElement | null>;
   onImageUpload: (file: File) => void;
 }) {
+  const subcats = formCategory ? SUBCATEGORY_CONFIG[formCategory] : [];
+  const catCfg = CATEGORY_CONFIG.find((c) => c.id === formCategory);
+
+  function handleCategorySelect(cat: ReportCategory) {
+    setFormCategory(cat);
+    setFormType(CATEGORY_DEFAULT_TYPE[cat]);
+  }
+
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       {/* Location */}
@@ -358,75 +429,60 @@ function ReportForm({
         </p>
       </div>
 
-      {/* Type — 5 buttons: 3 on first row, 2 on second */}
+      {/* Step 1: Category */}
       <div>
         <label className="text-xs font-medium text-muted-foreground">Tipo de problema</label>
-        <div className="mt-1.5 grid grid-cols-3 gap-2">
-          <button
-            type="button"
-            onClick={() => setFormType("electricity")}
-            className={`flex items-center justify-center gap-2 rounded-lg border p-3 text-sm font-medium transition-colors ${
-              formType === "electricity"
-                ? "border-amber-400/50 bg-amber-400/10 text-amber-400"
-                : "border-border text-muted-foreground hover:border-foreground/20"
-            }`}
-          >
-            <Zap className="h-4 w-4" />
-            Sem Luz
-          </button>
-          <button
-            type="button"
-            onClick={() => setFormType("telecom_mobile")}
-            className={`flex items-center justify-center gap-2 rounded-lg border p-3 text-sm font-medium transition-colors ${
-              formType === "telecom_mobile"
-                ? "border-blue-400/50 bg-blue-400/10 text-blue-400"
-                : "border-border text-muted-foreground hover:border-foreground/20"
-            }`}
-          >
-            <Wifi className="h-4 w-4" />
-            Móvel
-          </button>
-          <button
-            type="button"
-            onClick={() => setFormType("telecom_fixed")}
-            className={`flex items-center justify-center gap-2 rounded-lg border p-3 text-sm font-medium transition-colors ${
-              formType === "telecom_fixed"
-                ? "border-indigo-400/50 bg-indigo-400/10 text-indigo-400"
-                : "border-border text-muted-foreground hover:border-foreground/20"
-            }`}
-          >
-            <Globe className="h-4 w-4" />
-            Fixa
-          </button>
-          <button
-            type="button"
-            onClick={() => setFormType("water")}
-            className={`col-span-1 flex items-center justify-center gap-2 rounded-lg border p-3 text-sm font-medium transition-colors ${
-              formType === "water"
-                ? "border-cyan-400/50 bg-cyan-400/10 text-cyan-400"
-                : "border-border text-muted-foreground hover:border-foreground/20"
-            }`}
-          >
-            <Droplets className="h-4 w-4" />
-            Água
-          </button>
-          <button
-            type="button"
-            onClick={() => setFormType("roads")}
-            className={`col-span-2 flex items-center justify-center gap-2 rounded-lg border p-3 text-sm font-medium transition-colors ${
-              formType === "roads"
-                ? "border-orange-400/50 bg-orange-400/10 text-orange-400"
-                : "border-border text-muted-foreground hover:border-foreground/20"
-            }`}
-          >
-            <Construction className="h-4 w-4" />
-            Estrada Cortada
-          </button>
+        <div className="mt-1.5 grid grid-cols-5 gap-1.5">
+          {CATEGORY_CONFIG.map((cat) => {
+            const isActive = formCategory === cat.id;
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => handleCategorySelect(cat.id)}
+                className={`flex flex-col items-center gap-1 rounded-lg border py-2.5 px-1 text-xs font-medium transition-colors ${
+                  isActive ? cat.activeClass : "border-border text-muted-foreground hover:border-foreground/20"
+                }`}
+              >
+                <cat.icon className="h-4 w-4" />
+                <span>{cat.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
+      {/* Step 2: Subcategory */}
+      {formCategory && subcats.length > 0 && (
+        <div>
+          <label className="text-xs font-medium text-muted-foreground">
+            {formCategory === "telecom" ? "Tipo de ligação" : "Detalhar problema"}
+          </label>
+          <div className={`mt-1.5 grid gap-2 ${subcats.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
+            {subcats.map((sub) => {
+              const isActive = formType === sub.type;
+              return (
+                <button
+                  key={sub.type}
+                  type="button"
+                  onClick={() => setFormType(sub.type)}
+                  className={`flex items-center justify-center gap-1.5 rounded-lg border p-2.5 text-xs font-medium transition-colors ${
+                    isActive
+                      ? (catCfg?.activeClass ?? "border-primary/50 bg-primary/10 text-primary")
+                      : "border-border text-muted-foreground hover:border-foreground/20"
+                  }`}
+                >
+                  <sub.icon className="h-3.5 w-3.5" />
+                  {sub.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Operator (telecom only) */}
-      {formType.startsWith("telecom") && (
+      {formCategory && formType.startsWith("telecom") && (
         <div>
           <label className="text-xs font-medium text-muted-foreground">Operadora</label>
           <div className="mt-1.5 grid grid-cols-2 gap-2">
@@ -448,49 +504,54 @@ function ReportForm({
         </div>
       )}
 
-      {/* Street */}
-      <div>
-        <label className="text-xs font-medium text-muted-foreground">
-          Rua / Local <span className="text-muted-foreground/60">(opcional)</span>
-        </label>
-        <input
-          type="text"
-          value={formStreet}
-          onChange={(e) => setFormStreet(e.target.value)}
-          placeholder="Ex: Rua de São Domingos"
-          className="mt-1 w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none"
-        />
-      </div>
+      {/* Detail fields — only shown after category is selected */}
+      {formCategory && (
+        <>
+          {/* Street */}
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">
+              Rua / Local <span className="text-muted-foreground/60">(opcional)</span>
+            </label>
+            <input
+              type="text"
+              value={formStreet}
+              onChange={(e) => setFormStreet(e.target.value)}
+              placeholder="Ex: Rua de São Domingos"
+              className="mt-1 w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none"
+            />
+          </div>
 
-      {/* Description */}
-      <div>
-        <label className="text-xs font-medium text-muted-foreground">
-          Descrição <span className="text-muted-foreground/60">(opcional)</span>
-        </label>
-        <textarea
-          value={formDescription}
-          onChange={(e) => setFormDescription(e.target.value)}
-          placeholder="Ex: Sem luz desde as 14h, todo o prédio afetado"
-          rows={2}
-          className="mt-1 w-full resize-none rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none"
-        />
-      </div>
+          {/* Description */}
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">
+              Descrição <span className="text-muted-foreground/60">(opcional)</span>
+            </label>
+            <textarea
+              value={formDescription}
+              onChange={(e) => setFormDescription(e.target.value)}
+              placeholder="Ex: Sem luz desde as 14h, todo o prédio afetado"
+              rows={2}
+              className="mt-1 w-full resize-none rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none"
+            />
+          </div>
 
-      {/* Photo upload */}
-      <PhotoUpload
-        imageUrl={imageUrl}
-        uploading={uploading}
-        fileRef={fileRef}
-        onImageUpload={onImageUpload}
-      />
+          {/* Photo upload */}
+          <PhotoUpload
+            imageUrl={imageUrl}
+            uploading={uploading}
+            fileRef={fileRef}
+            onImageUpload={onImageUpload}
+          />
 
-      <button
-        type="submit"
-        disabled={submitting}
-        className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
-      >
-        {submitting ? "A enviar..." : "Enviar Reporte"}
-      </button>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+          >
+            {submitting ? "A enviar..." : "Enviar Reporte"}
+          </button>
+        </>
+      )}
     </form>
   );
 }

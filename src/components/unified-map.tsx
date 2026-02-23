@@ -176,7 +176,7 @@ function getTelecomColor(pct: number | null): string {
 
 function getReportColor(type: string, operator: string | null): string {
   if (type === "electricity") return "#f59e0b";
-  if (type === "roads") return "#f97316";
+  if (type === "roads" || type === "roads_tree" || type === "roads_damage") return "#f97316";
   if (type === "telecom_mobile") {
     switch (operator) {
       case "MEO": return "#00a3e0";
@@ -195,7 +195,8 @@ function getReportColor(type: string, operator: string | null): string {
       default: return "#6366f1";
     }
   }
-  if (type === "water") return "#06b6d4";
+  if (type === "water" || type === "water_leak") return "#06b6d4";
+  if (type === "other_garbage" || type === "other") return "#8b5cf6";
   return "#8b5cf6";
 }
 
@@ -206,10 +207,14 @@ function getReportLabel(type: string, operator: string | null, description?: str
     return "Sem luz";
   }
   if (type === "roads") return "Estrada cortada";
+  if (type === "roads_tree") return "Árvore na via";
+  if (type === "roads_damage") return "Dano na estrada";
   if (type === "telecom_mobile") return `Sem rede móvel${operator ? ` ${operator}` : ""}`;
   if (type === "telecom_fixed") return `Sem rede fixa${operator ? ` ${operator}` : ""}`;
   if (type === "water") return "Sem água";
-  return "Reporte";
+  if (type === "water_leak") return "Rotura de conduta";
+  if (type === "other_garbage") return "Recolha de lixo";
+  return "Outro problema";
 }
 
 function isStale(report: Report): boolean {

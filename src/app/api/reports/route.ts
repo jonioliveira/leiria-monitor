@@ -75,9 +75,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!["electricity", "telecom_mobile", "telecom_fixed", "water", "roads"].includes(type)) {
+    const validTypes = [
+      "electricity",
+      "telecom_mobile", "telecom_fixed",
+      "water", "water_leak",
+      "roads", "roads_tree", "roads_damage",
+      "other_garbage", "other",
+    ];
+    if (!validTypes.includes(type)) {
       return NextResponse.json(
-        { success: false, error: "type deve ser 'electricity', 'telecom_mobile', 'telecom_fixed', 'water' ou 'roads'" },
+        { success: false, error: `Tipo inválido: ${type}` },
         { status: 400 }
       );
     }
