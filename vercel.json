@@ -1,5 +1,6 @@
 {
   "crons": [
-    { "path": "/api/cron/ingest-all", "schedule": "0 0 * * *" }
+    { "path": "/api/cron/ingest-all", "schedule": "0 0 * * *" },
+    { "path": "/api/cron/telecom", "schedule": "*/15 * * * *" }
   ]
 }
