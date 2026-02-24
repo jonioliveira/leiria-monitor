@@ -24,7 +24,6 @@ import {
   AlertTriangle,
   Clock,
 } from "lucide-react";
-import type { TransformerMarker } from "@/lib/types";
 
 /* ── Local types ──────────────────────────────────────────── */
 
@@ -34,6 +33,7 @@ interface Report {
   operator: string | null;
   description: string | null;
   street: string | null;
+  parish: string | null;
   lat: number;
   lng: number;
   upvotes: number;
@@ -84,29 +84,6 @@ interface TelecomData {
 }
 
 /* ── Helpers ───────────────────────────────────────────────── */
-
-function resolveReportConcelho(
-  r: Report,
-  transformers: TransformerMarker[],
-): string {
-  if (r.street) {
-    for (const t of transformers) {
-      if (r.lat.toFixed(5) === t.lat.toFixed(5) && r.lng.toFixed(5) === t.lng.toFixed(5)) {
-        return t.municipality;
-      }
-    }
-  }
-  let best = "";
-  let bestDist = Infinity;
-  for (const t of transformers) {
-    const d = (r.lat - t.lat) ** 2 + (r.lng - t.lng) ** 2;
-    if (d < bestDist) {
-      bestDist = d;
-      best = t.municipality;
-    }
-  }
-  return best || "Desconhecido";
-}
 
 function getCoverageLabel(pct: number | null): string {
   if (pct == null) return "Sem dados";
@@ -175,7 +152,6 @@ type Tab = "electricity" | "telecom";
 
 export default function RecoveryPage() {
   const [reportsData, setReportsData] = useState<ReportsData | null>(null);
-  const [transformers, setTransformers] = useState<TransformerMarker[]>([]);
   const [subData, setSubData] = useState<SubstationData | null>(null);
   const [telecomData, setTelecomData] = useState<TelecomData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -186,12 +162,10 @@ export default function RecoveryPage() {
   useEffect(() => {
     Promise.allSettled([
       fetch("/api/reports").then((r) => r.json()),
-      fetch("/api/electricity/transformers").then((r) => r.json()),
       fetch("/api/electricity/substations").then((r) => r.json()),
       fetch("/api/telecom").then((r) => r.json()),
-    ]).then(([reportsResult, transformersResult, subResult, telecomResult]) => {
+    ]).then(([reportsResult, subResult, telecomResult]) => {
       if (reportsResult.status === "fulfilled") setReportsData(reportsResult.value);
-      if (transformersResult.status === "fulfilled") setTransformers(transformersResult.value.transformers ?? []);
       if (subResult.status === "fulfilled") setSubData(subResult.value);
       if (telecomResult.status === "fulfilled") setTelecomData(telecomResult.value);
       setLoading(false);
@@ -229,16 +203,16 @@ export default function RecoveryPage() {
     [reports]
   );
 
-  /* Group electricity reports by municipality */
+  /* Group electricity reports by parish (already resolved server-side) */
   const reportsByMunicipality = useMemo(() => {
-    if (electricReports.length === 0 || transformers.length === 0) return [];
+    if (electricReports.length === 0) return [];
     const counts: Record<string, number> = {};
     for (const r of electricReports) {
-      const municipality = resolveReportConcelho(r, transformers);
-      counts[municipality] = (counts[municipality] ?? 0) + 1;
+      const label = r.parish ?? "Desconhecido";
+      counts[label] = (counts[label] ?? 0) + 1;
     }
     return Object.entries(counts).map(([municipality, count]) => ({ municipality, count }));
-  }, [electricReports, transformers]);
+  }, [electricReports]);
 
   const substationsRecovered = subData?.substations?.filter((s) => s.latestLoad != null && s.latestLoad > 0).length ?? 0;
   const totalSubstations = subData?.substations?.length ?? 0;
@@ -351,7 +325,7 @@ export default function RecoveryPage() {
           {/* Reports by municipality chart */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">Reportes por Concelho</CardTitle>
+              <CardTitle className="text-sm">Reportes por Freguesia</CardTitle>
             </CardHeader>
             <CardContent>
               <OutageChart data={reportsByMunicipality} />
