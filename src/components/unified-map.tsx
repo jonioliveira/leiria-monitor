@@ -13,7 +13,7 @@ import {
 import MarkerClusterGroup from "react-leaflet-cluster";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 /* ── Shared types (local to map) ──────────────────────────── */
 
@@ -242,14 +242,18 @@ function getPtdColor(usage: string): string {
   return "#64748b";
 }
 
+const ptdIconCache = new Map<string, L.DivIcon>();
 function createPtdIcon(usage: string): L.DivIcon {
-  const color = getPtdColor(usage);
-  return L.divIcon({
-    html: `<div style="width:18px;height:18px;background:${color};border:2px solid white;box-shadow:0 0 5px rgba(0,0,0,0.35);transform:rotate(45deg);border-radius:2px"></div>`,
-    className: "",
-    iconSize: [18, 18],
-    iconAnchor: [9, 9],
-  });
+  if (!ptdIconCache.has(usage)) {
+    const color = getPtdColor(usage);
+    ptdIconCache.set(usage, L.divIcon({
+      html: `<div style="width:18px;height:18px;background:${color};border:2px solid white;box-shadow:0 0 5px rgba(0,0,0,0.35);transform:rotate(45deg);border-radius:2px"></div>`,
+      className: "",
+      iconSize: [18, 18],
+      iconAnchor: [9, 9],
+    }));
+  }
+  return ptdIconCache.get(usage)!;
 }
 
 function getAntennaMarkerColor(operators: string[]): string {
@@ -257,13 +261,97 @@ function getAntennaMarkerColor(operators: string[]): string {
   return OPERATOR_COLORS[operators[0]] ?? "#64748b";
 }
 
+const antennaIconCache = new Map<string, L.DivIcon>();
 function createAntennaIcon(operators: string[]): L.DivIcon {
-  const color = getAntennaMarkerColor(operators);
+  const key = [...operators].sort().join(",");
+  if (!antennaIconCache.has(key)) {
+    const color = getAntennaMarkerColor(operators);
+    antennaIconCache.set(key, L.divIcon({
+      html: `<div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer"><svg width="30" height="30" viewBox="0 0 22 22"><circle cx="11" cy="13" r="5" fill="${color}" stroke="white" stroke-width="2"/><path d="M6.5 8.5a6.5 6.5 0 0 1 9 0" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round"/><path d="M4 6a10 10 0 0 1 14 0" fill="none" stroke="${color}" stroke-width="1.3" stroke-linecap="round" opacity="0.5"/></svg></div>`,
+      className: "",
+      iconSize: [44, 44],
+      iconAnchor: [22, 22],
+    }));
+  }
+  return antennaIconCache.get(key)!;
+}
+
+/* ── Report icon (circle DivIcon, cached) ──────────────────── */
+
+const reportIconCache = new Map<string, L.DivIcon>();
+function createReportIcon(color: string, radius: number, priority: string | undefined, stale: boolean): L.DivIcon {
+  const r = Math.round(radius);
+  const key = `${color}-${r}-${priority ?? "normal"}-${stale ? 1 : 0}`;
+  if (reportIconCache.has(key)) return reportIconCache.get(key)!;
+  const size = Math.max(r * 2, 12);
+  const borderColor = priority === "urgente" ? "#ef4444" : priority === "importante" ? "#f97316" : color;
+  const borderWidth = priority === "urgente" ? 3 : 2;
+  // 8-digit hex: last 2 digits = alpha (26 ≈ 15%, 72 ≈ 45%)
+  const alpha = stale ? "26" : "72";
+  const borderStyle = stale ? "dashed" : "solid";
+  const icon = L.divIcon({
+    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color}${alpha};border:${borderWidth}px ${borderStyle} ${borderColor};box-shadow:0 1px 4px rgba(0,0,0,0.25)"></div>`,
+    className: priority === "urgente" ? "report-urgente" : "",
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+  });
+  reportIconCache.set(key, icon);
+  return icon;
+}
+
+/* ── Cluster icon functions (module-level = stable refs) ───── */
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function createTransformerClusterIcon(cluster: any): L.DivIcon {
+  const count = cluster.getChildCount();
+  let dim = 30;
+  if (count > 100) dim = 44;
+  else if (count > 30) dim = 36;
   return L.divIcon({
-    html: `<div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer"><svg width="30" height="30" viewBox="0 0 22 22"><circle cx="11" cy="13" r="5" fill="${color}" stroke="white" stroke-width="2"/><path d="M6.5 8.5a6.5 6.5 0 0 1 9 0" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round"/><path d="M4 6a10 10 0 0 1 14 0" fill="none" stroke="${color}" stroke-width="1.3" stroke-linecap="round" opacity="0.5"/></svg></div>`,
+    html: `<div style="background:rgba(6,182,212,0.75);color:white;border-radius:50%;width:${dim}px;height:${dim}px;display:flex;align-items:center;justify-content:center;font-size:${dim > 36 ? 13 : 11}px;font-weight:600;border:2px solid rgba(255,255,255,0.8);box-shadow:0 2px 6px rgba(0,0,0,0.3)">${count}</div>`,
     className: "",
-    iconSize: [44, 44],
-    iconAnchor: [22, 22],
+    iconSize: L.point(dim, dim),
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function createAntennaClusterIcon(cluster: any): L.DivIcon {
+  const count = cluster.getChildCount();
+  let dim = 34;
+  if (count > 100) dim = 48;
+  else if (count > 30) dim = 40;
+  return L.divIcon({
+    html: `<div style="background:rgba(99,102,241,0.85);color:white;border-radius:50%;width:${dim}px;height:${dim}px;display:flex;align-items:center;justify-content:center;font-size:${dim > 40 ? 14 : 12}px;font-weight:600;border:2px solid rgba(255,255,255,0.85);box-shadow:0 2px 8px rgba(0,0,0,0.3)">${count}</div>`,
+    className: "",
+    iconSize: L.point(dim, dim),
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function createReportClusterIcon(cluster: any): L.DivIcon {
+  const count = cluster.getChildCount();
+  let dim = 32;
+  if (count > 100) dim = 48;
+  else if (count > 30) dim = 40;
+  else if (count > 10) dim = 36;
+  return L.divIcon({
+    html: `<div style="background:rgba(139,92,246,0.85);color:white;border-radius:50%;width:${dim}px;height:${dim}px;display:flex;align-items:center;justify-content:center;font-size:${dim > 40 ? 14 : 12}px;font-weight:600;border:2px solid rgba(255,255,255,0.85);box-shadow:0 2px 8px rgba(0,0,0,0.3)">${count > 999 ? `${(count / 1000).toFixed(1)}k` : count}</div>`,
+    className: "",
+    iconSize: L.point(dim, dim),
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function createPoleClusterIcon(cluster: any): L.DivIcon {
+  const count = cluster.getChildCount();
+  let dim = 28;
+  if (count > 500) dim = 44;
+  else if (count > 100) dim = 36;
+  else if (count > 30) dim = 32;
+  return L.divIcon({
+    html: `<div style="background:rgba(245,158,11,0.7);color:white;border-radius:50%;width:${dim}px;height:${dim}px;display:flex;align-items:center;justify-content:center;font-size:${dim > 36 ? 12 : 10}px;font-weight:600;border:2px solid rgba(255,255,255,0.8);box-shadow:0 2px 6px rgba(0,0,0,0.3)">${count >= 1000 ? `${(count / 1000).toFixed(1)}k` : count}</div>`,
+    className: "",
+    iconSize: L.point(dim, dim),
   });
 }
 
@@ -481,18 +569,25 @@ export function UnifiedMap({
   const poles = layers.poles ?? [];
   const hotspots = layers.hotspots ?? [];
 
-  const filteredAntennas = visibleOperators
-    ? antennas.filter((a) => a.operators.some((op) => visibleOperators.has(op)))
-    : antennas;
+  const filteredAntennas = useMemo(
+    () => visibleOperators
+      ? antennas.filter((a) => a.operators.some((op) => visibleOperators.has(op)))
+      : antennas,
+    [antennas, visibleOperators],
+  );
 
   // Build coordinate → reports lookup for infrastructure matching
-  const reportsByCoords = new Map<string, Report[]>();
-  for (const r of reports) {
-    const key = `${r.lat.toFixed(5)},${r.lng.toFixed(5)}`;
-    const arr = reportsByCoords.get(key);
-    if (arr) arr.push(r);
-    else reportsByCoords.set(key, [r]);
-  }
+  const reportsByCoords = useMemo(() => {
+    const map = new Map<string, Report[]>();
+    for (const r of reports) {
+      const key = `${r.lat.toFixed(5)},${r.lng.toFixed(5)}`;
+      const arr = map.get(key);
+      if (arr) arr.push(r);
+      else map.set(key, [r]);
+    }
+    return map;
+  }, [reports]);
+
   function findReportsAt(lat: number, lng: number): Report[] {
     return reportsByCoords.get(`${lat.toFixed(5)},${lng.toFixed(5)}`) ?? [];
   }
@@ -646,18 +741,7 @@ export function UnifiedMap({
           maxClusterRadius={50}
           spiderfyOnMaxZoom
           showCoverageOnHover={false}
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          iconCreateFunction={(cluster: any) => {
-            const count = cluster.getChildCount();
-            let dim = 30;
-            if (count > 100) dim = 44;
-            else if (count > 30) dim = 36;
-            return L.divIcon({
-              html: `<div style="background:rgba(6,182,212,0.75);color:white;border-radius:50%;width:${dim}px;height:${dim}px;display:flex;align-items:center;justify-content:center;font-size:${dim > 36 ? 13 : 11}px;font-weight:600;border:2px solid rgba(255,255,255,0.8);box-shadow:0 2px 6px rgba(0,0,0,0.3)">${count}</div>`,
-              className: "",
-              iconSize: L.point(dim, dim),
-            });
-          }}
+          iconCreateFunction={createTransformerClusterIcon}
         >
           {transformers.map((t, i) => {
             const existingReports = findReportsAt(t.lat, t.lng);
@@ -771,18 +855,7 @@ export function UnifiedMap({
           maxClusterRadius={50}
           spiderfyOnMaxZoom
           showCoverageOnHover={false}
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          iconCreateFunction={(cluster: any) => {
-            const count = cluster.getChildCount();
-            let dim = 34;
-            if (count > 100) dim = 48;
-            else if (count > 30) dim = 40;
-            return L.divIcon({
-              html: `<div style="background:rgba(99,102,241,0.85);color:white;border-radius:50%;width:${dim}px;height:${dim}px;display:flex;align-items:center;justify-content:center;font-size:${dim > 40 ? 14 : 12}px;font-weight:600;border:2px solid rgba(255,255,255,0.85);box-shadow:0 2px 8px rgba(0,0,0,0.3)">${count}</div>`,
-              className: "",
-              iconSize: L.point(dim, dim),
-            });
-          }}
+          iconCreateFunction={createAntennaClusterIcon}
         >
           {filteredAntennas.map((a, i) => {
             const existingReports = findReportsAt(a.lat, a.lng);
@@ -929,29 +1002,26 @@ export function UnifiedMap({
             </Marker>
           ))}
 
-      {/* ── Reports layer ─────────────────────────────────── */}
-      {visibleLayers.has("reports") &&
-        reports.map((r) => {
+      {/* ── Reports layer — clustered ──────────────────────── */}
+      {visibleLayers.has("reports") && reports.length > 0 && (
+        <MarkerClusterGroup
+          chunkedLoading
+          maxClusterRadius={40}
+          spiderfyOnMaxZoom
+          showCoverageOnHover={false}
+          iconCreateFunction={createReportClusterIcon}
+        >
+        {reports.map((r) => {
           const color = getReportColor(r.type, r.operator);
           const stale = isStale(r);
           const priorityBase = r.priority === "urgente" ? 10 : r.priority === "importante" ? 8 : 6;
           const baseRadius = Math.min(priorityBase + r.upvotes * 1.5, 22);
           const radius = stale ? baseRadius * 0.6 : baseRadius;
-          const borderColor = r.priority === "urgente" ? "#ef4444" : r.priority === "importante" ? "#f97316" : color;
-          const weight = r.priority === "urgente" ? 3 : 2;
           return (
-            <CircleMarker
+            <Marker
               key={`report-${r.id}`}
-              center={[r.lat, r.lng]}
-              radius={radius}
-              pathOptions={{
-                color: borderColor,
-                fillColor: color,
-                fillOpacity: stale ? 0.15 : 0.45,
-                weight,
-                dashArray: stale ? "4 4" : undefined,
-              }}
-              className={r.priority === "urgente" ? "report-urgente" : undefined}
+              position={[r.lat, r.lng]}
+              icon={createReportIcon(color, radius, r.priority, stale)}
             >
               <Popup>
                 <div style={{ fontFamily: "sans-serif", fontSize: "13px", lineHeight: "1.6", minWidth: 200 }}>
@@ -1041,9 +1111,11 @@ export function UnifiedMap({
                   </div>
                 </div>
               </Popup>
-            </CircleMarker>
+            </Marker>
           );
         })}
+        </MarkerClusterGroup>
+      )}
 
       {/* ── Hotspot overlay ────────────────────────────────── */}
       {visibleLayers.has("reports") &&
@@ -1081,19 +1153,7 @@ export function UnifiedMap({
           disableClusteringAtZoom={18}
           spiderfyOnMaxZoom
           showCoverageOnHover={false}
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          iconCreateFunction={(cluster: any) => {
-            const count = cluster.getChildCount();
-            let dim = 28;
-            if (count > 500) dim = 44;
-            else if (count > 100) dim = 36;
-            else if (count > 30) dim = 32;
-            return L.divIcon({
-              html: `<div style="background:rgba(245,158,11,0.7);color:white;border-radius:50%;width:${dim}px;height:${dim}px;display:flex;align-items:center;justify-content:center;font-size:${dim > 36 ? 12 : 10}px;font-weight:600;border:2px solid rgba(255,255,255,0.8);box-shadow:0 2px 6px rgba(0,0,0,0.3)">${count >= 1000 ? `${(count / 1000).toFixed(1)}k` : count}</div>`,
-              className: "",
-              iconSize: L.point(dim, dim),
-            });
-          }}
+          iconCreateFunction={createPoleClusterIcon}
         >
           {poles.map((p) => (
             <Marker key={`pole-${p.id}`} position={[p.lat, p.lng]} icon={poleIcon}>
