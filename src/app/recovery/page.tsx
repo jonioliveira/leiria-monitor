@@ -353,9 +353,15 @@ export default function RecoveryPage() {
               <span className="text-xs text-muted-foreground">MEO Média</span>
             </div>
             <p className="mt-1 text-2xl font-bold">
-              {avgMeoCoverage != null ? `${avgMeoCoverage}%` : "—"}
+              {avgMeoCoverage != null
+                ? `${avgMeoCoverage}%`
+                : telecomData?.meo_availability?.global?.rede_fixa_pct != null
+                  ? `${telecomData.meo_availability.global.rede_fixa_pct}%`
+                  : "—"}
             </p>
-            <p className="text-xs text-muted-foreground">cobertura móvel</p>
+            <p className="text-xs text-muted-foreground">
+              {avgMeoCoverage != null ? "cobertura móvel em Leiria" : "cobertura fixa nacional"}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -488,7 +494,7 @@ export default function RecoveryPage() {
           </div>
 
           {/* MEO coverage table */}
-          {leiriaDistrict.length > 0 && (
+          {telecomData?.meo_availability?.success && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -496,82 +502,101 @@ export default function RecoveryPage() {
                   <span>Cobertura MEO por concelho</span>
                 </CardTitle>
                 <p className="text-xs text-muted-foreground">Fonte: MEO Disponibilidade de Serviços</p>
-                <p className="text-sm text-muted-foreground">
-                  Procure o seu concelho para ver o estado da rede móvel e fixa.
-                </p>
+                {leiriaDistrict.length > 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    Procure o seu concelho para ver o estado da rede móvel e fixa.
+                  </p>
+                )}
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Search */}
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <input
-                    type="search"
-                    placeholder="Procurar concelho (ex: Leiria, Pombal...)"
-                    value={concelhoFilter}
-                    onChange={(e) => setConcelhoFilter(e.target.value)}
-                    className="w-full rounded-lg border border-border bg-background py-2.5 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                  />
-                </div>
+                {leiriaDistrict.length === 0 && (
+                  <div className="flex items-center gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
+                    <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-400" />
+                    <p className="text-sm text-emerald-400">
+                      Sem concelhos afetados em Leiria — serviço MEO normalizado.
+                      {telecomData.meo_availability.global?.rede_fixa_pct != null && (
+                        <span className="text-muted-foreground">
+                          {" "}Cobertura fixa nacional: {telecomData.meo_availability.global.rede_fixa_pct}%
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                )}
+                {leiriaDistrict.length > 0 && (
+                  <>
+                    {/* Search */}
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <input
+                        type="search"
+                        placeholder="Procurar concelho (ex: Leiria, Pombal...)"
+                        value={concelhoFilter}
+                        onChange={(e) => setConcelhoFilter(e.target.value)}
+                        className="w-full rounded-lg border border-border bg-background py-2.5 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
 
-                {/* Desktop table */}
-                <div className="hidden overflow-x-auto sm:block">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Concelho</TableHead>
-                        <TableHead className="text-center">Telemóvel</TableHead>
-                        <TableHead className="text-center">Internet de casa</TableHead>
-                        <TableHead>Previsão normalização</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
+                    {/* Desktop table */}
+                    <div className="hidden overflow-x-auto sm:block">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Concelho</TableHead>
+                            <TableHead className="text-center">Telemóvel</TableHead>
+                            <TableHead className="text-center">Internet de casa</TableHead>
+                            <TableHead>Previsão normalização</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {sortedConcelhos.map((c) => (
+                            <TableRow key={c.concelho}>
+                              <TableCell className="font-medium text-base">{c.concelho}</TableCell>
+                              <TableCell className="text-center">{getCoverageBadge(c.rede_movel_pct)}</TableCell>
+                              <TableCell className="text-center">{getCoverageBadge(c.rede_fixa_pct)}</TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {c.rede_movel_previsao || c.rede_fixa_previsao || "—"}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                          {sortedConcelhos.length === 0 && (
+                            <TableRow>
+                              <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+                                Nenhum concelho encontrado para &quot;{concelhoFilter}&quot;
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    {/* Mobile cards */}
+                    <div className="space-y-3 sm:hidden">
                       {sortedConcelhos.map((c) => (
-                        <TableRow key={c.concelho}>
-                          <TableCell className="font-medium text-base">{c.concelho}</TableCell>
-                          <TableCell className="text-center">{getCoverageBadge(c.rede_movel_pct)}</TableCell>
-                          <TableCell className="text-center">{getCoverageBadge(c.rede_fixa_pct)}</TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {c.rede_movel_previsao || c.rede_fixa_previsao || "—"}
-                          </TableCell>
-                        </TableRow>
+                        <div key={c.concelho} className="rounded-lg border border-border p-4 space-y-2">
+                          <p className="text-base font-semibold text-foreground">{c.concelho}</p>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">Telemóvel</span>
+                            {getCoverageBadge(c.rede_movel_pct)}
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">Internet de casa</span>
+                            {getCoverageBadge(c.rede_fixa_pct)}
+                          </div>
+                          {(c.rede_movel_previsao || c.rede_fixa_previsao) && (
+                            <p className="text-xs text-muted-foreground">
+                              Previsão: {c.rede_movel_previsao || c.rede_fixa_previsao}
+                            </p>
+                          )}
+                        </div>
                       ))}
                       {sortedConcelhos.length === 0 && (
-                        <TableRow>
-                          <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-                            Nenhum concelho encontrado para &quot;{concelhoFilter}&quot;
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-
-                {/* Mobile cards */}
-                <div className="space-y-3 sm:hidden">
-                  {sortedConcelhos.map((c) => (
-                    <div key={c.concelho} className="rounded-lg border border-border p-4 space-y-2">
-                      <p className="text-base font-semibold text-foreground">{c.concelho}</p>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Telemóvel</span>
-                        {getCoverageBadge(c.rede_movel_pct)}
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Internet de casa</span>
-                        {getCoverageBadge(c.rede_fixa_pct)}
-                      </div>
-                      {(c.rede_movel_previsao || c.rede_fixa_previsao) && (
-                        <p className="text-xs text-muted-foreground">
-                          Previsão: {c.rede_movel_previsao || c.rede_fixa_previsao}
+                        <p className="py-6 text-center text-sm text-muted-foreground">
+                          Nenhum concelho encontrado para &quot;{concelhoFilter}&quot;
                         </p>
                       )}
                     </div>
-                  ))}
-                  {sortedConcelhos.length === 0 && (
-                    <p className="py-6 text-center text-sm text-muted-foreground">
-                      Nenhum concelho encontrado para &quot;{concelhoFilter}&quot;
-                    </p>
-                  )}
-                </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           )}
