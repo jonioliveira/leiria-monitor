@@ -69,6 +69,14 @@ interface MeoConcelhoData {
   is_leiria_district: boolean;
 }
 
+interface NosConcelhoData {
+  concelho: string;
+  distrito: string;
+  rede_fixa_pct: number | null;
+  rede_movel_pct: number | null;
+  is_leiria_district: boolean;
+}
+
 interface TelecomData {
   success: boolean;
   timestamp: string;
@@ -80,6 +88,13 @@ interface TelecomData {
       rede_fixa_pct: number | null;
     } | null;
     leiria_district: MeoConcelhoData[];
+  };
+  nos_availability?: {
+    success: boolean;
+    leiria_district: NosConcelhoData[];
+    leiria_concelho: NosConcelhoData | null;
+    source_url: string;
+    fetched_at: string;
   };
 }
 
@@ -120,7 +135,7 @@ function getCoverageBadge(pct: number | null) {
   );
 }
 
-function getOverallStatus(leiriaDistrict: MeoConcelhoData[]) {
+function getOverallStatus(leiriaDistrict: { rede_movel_pct: number | null }[]) {
   if (leiriaDistrict.length === 0)
     return { level: "unknown" as const, label: "Sem informação", description: "Não foi possível obter dados de cobertura." };
 
@@ -177,6 +192,11 @@ export default function RecoveryPage() {
     [telecomData]
   );
 
+  const nosLeiriaDistrict = useMemo(
+    () => telecomData?.nos_availability?.leiria_district ?? [],
+    [telecomData]
+  );
+
   const filteredConcelhos = useMemo(() => {
     if (!concelhoFilter.trim()) return leiriaDistrict;
     const q = concelhoFilter.toLowerCase().trim();
@@ -193,7 +213,19 @@ export default function RecoveryPage() {
     [filteredConcelhos]
   );
 
-  const overallStatus = useMemo(() => getOverallStatus(leiriaDistrict), [leiriaDistrict]);
+  const sortedNosConcelhos = useMemo(
+    () =>
+      [...nosLeiriaDistrict].sort((a, b) => {
+        const aPct = a.rede_movel_pct ?? 999;
+        const bPct = b.rede_movel_pct ?? 999;
+        return aPct - bPct;
+      }),
+    [nosLeiriaDistrict]
+  );
+
+  // Use MEO data for overall status; fall back to NOS when MEO unavailable
+  const effectiveDistrict = leiriaDistrict.length > 0 ? leiriaDistrict : nosLeiriaDistrict;
+  const overallStatus = useMemo(() => getOverallStatus(effectiveDistrict), [effectiveDistrict]);
 
   /* Derive report counts */
   const reports = reportsData?.reports ?? [];
@@ -428,6 +460,7 @@ export default function RecoveryPage() {
                   <Signal className="h-5 w-5 text-sky-400" />
                   <span>Cobertura MEO por concelho</span>
                 </CardTitle>
+                <p className="text-xs text-muted-foreground">Fonte: MEO Disponibilidade de Serviços</p>
                 <p className="text-sm text-muted-foreground">
                   Procure o seu concelho para ver o estado da rede móvel e fixa.
                 </p>
@@ -507,12 +540,65 @@ export default function RecoveryPage() {
               </CardContent>
             </Card>
           )}
+
+          {/* NOS coverage table */}
+          {nosLeiriaDistrict.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Signal className="h-5 w-5 text-orange-400" />
+                  <span>Cobertura NOS por concelho</span>
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">Fonte: NOS — Storm Kristin</p>
+              </CardHeader>
+              <CardContent>
+                {/* Desktop table */}
+                <div className="hidden overflow-x-auto sm:block">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Concelho</TableHead>
+                        <TableHead className="text-center">Telemóvel</TableHead>
+                        <TableHead className="text-center">Internet de casa</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sortedNosConcelhos.map((c) => (
+                        <TableRow key={c.concelho}>
+                          <TableCell className="font-medium text-base">{c.concelho}</TableCell>
+                          <TableCell className="text-center">{getCoverageBadge(c.rede_movel_pct)}</TableCell>
+                          <TableCell className="text-center">{getCoverageBadge(c.rede_fixa_pct)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Mobile cards */}
+                <div className="space-y-3 sm:hidden">
+                  {sortedNosConcelhos.map((c) => (
+                    <div key={c.concelho} className="rounded-lg border border-border p-4 space-y-2">
+                      <p className="text-base font-semibold text-foreground">{c.concelho}</p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Telemóvel</span>
+                        {getCoverageBadge(c.rede_movel_pct)}
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Internet de casa</span>
+                        {getCoverageBadge(c.rede_fixa_pct)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
       {/* Source */}
       <p className="text-xs text-muted-foreground">
-        Fontes: Reportes de utilizadores · E-REDES Open Data Portal · MEO Disponibilidade
+        Fontes: Reportes de utilizadores · E-REDES Open Data Portal · MEO Disponibilidade · NOS Storm Kristin
       </p>
     </div>
   );
