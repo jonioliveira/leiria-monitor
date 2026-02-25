@@ -12,6 +12,11 @@ const OPERATOR_ENDPOINTS = [
 
 const MEO_APP_URL =
   "https://app-ef66ba3b-3a54-42d4-9559-560dd50c913d.apps.meo.pt/Pages/Default.aspx?SenderId=346DB3AC0";
+const MEO_SEARCH_API =
+  "https://app-ef66ba3b-3a54-42d4-9559-560dd50c913d.apps.meo.pt/Services/Rest.svc/SearchStores";
+const MEO_API_KEY = "177204608089cec963d39972af2b2df0d2fcc130d6";
+// Bounding box covering the entire Leiria district including coastal Peniche
+const MEO_LEIRIA_BBOX = { latitude1: 39.2, longitude1: -9.5, latitude2: 40.2, longitude2: -8.1 };
 const MEO_AVAILABILITY_URL = "https://www.meo.pt/disponibilidade-servicos-meo";
 const NOS_FORUM_URL =
   "https://forum.nos.pt/novidades-16/depressao-kristin-o-que-precisa-saber-51910";
@@ -90,6 +95,7 @@ async function scrapeMeoAvailability() {
     fetched_at: new Date().toISOString(),
   };
 
+  // Fetch HTML page for last_updated date and global stats
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
@@ -99,64 +105,81 @@ async function scrapeMeoAvailability() {
       cache: "no-store",
     });
     clearTimeout(timeout);
-    if (!res.ok) return result;
-
-    const html = await res.text();
-
-    const dateMatch = html.match(/Atualizado\s+a\s+(\d{2})\/(\d{2})\/(\d{4})/i);
-    if (dateMatch) result.last_updated = `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`;
-
-    const globalSection = html.match(/Situa[çc][ãa]o global[\s\S]*?<\/ul>\s*<\/div>/i);
-    if (globalSection) {
-      const pValues = [...globalSection[0].matchAll(/<ul class="table-info-item-descriptions">([\s\S]*?)<\/ul>/gi)];
-      const extractValues = (ulContent: string): string[] =>
-        [...ulContent.matchAll(/<li>[\s\S]*?<p>([\s\S]*?)<\/p>[\s\S]*?<p>([\s\S]*?)<\/p>[\s\S]*?<\/li>/gi)].map((m) => stripHtml(m[2]));
-      if (pValues.length >= 2) {
-        const fixaVals = extractValues(pValues[0][1]);
-        const movelVals = extractValues(pValues[1][1]);
-        result.global = {
-          rede_fixa_pct: fixaVals[0] ? parsePercentage(fixaVals[0]) : null,
-          rede_fixa_previsao_95: fixaVals[1] ?? "",
-          rede_movel_pct: movelVals[0] ? parsePercentage(movelVals[0]) : null,
-          rede_movel_previsao_95: movelVals[1] ?? "",
-        };
+    if (res.ok) {
+      const html = await res.text();
+      const dateMatch = html.match(/Atualizado\s+a\s+(\d{2})\/(\d{2})\/(\d{4})/i);
+      if (dateMatch) result.last_updated = `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`;
+      const globalSection = html.match(/Situa[çc][ãa]o global[\s\S]*?<\/ul>\s*<\/div>/i);
+      if (globalSection) {
+        const pValues = [...globalSection[0].matchAll(/<ul class="table-info-item-descriptions">([\s\S]*?)<\/ul>/gi)];
+        const extractValues = (ulContent: string): string[] =>
+          [...ulContent.matchAll(/<li>[\s\S]*?<p>([\s\S]*?)<\/p>[\s\S]*?<p>([\s\S]*?)<\/p>[\s\S]*?<\/li>/gi)].map((m) => stripHtml(m[2]));
+        if (pValues.length >= 2) {
+          const fixaVals = extractValues(pValues[0][1]);
+          const movelVals = extractValues(pValues[1][1]);
+          result.global = {
+            rede_fixa_pct: fixaVals[0] ? parsePercentage(fixaVals[0]) : null,
+            rede_fixa_previsao_95: fixaVals[1] ?? "",
+            rede_movel_pct: movelVals[0] ? parsePercentage(movelVals[0]) : null,
+            rede_movel_previsao_95: movelVals[1] ?? "",
+          };
+        }
       }
     }
+  } catch { /* HTML fetch failed — non-critical */ }
 
-    const poisMatch = html.match(/defaultPOIs\s*:\s*(\[[\s\S]*?\])\s*,/);
-    if (poisMatch) {
-      try {
-        const pois: { Name: string; Address: string; PercentLandline: string; DateLandline: string; PercentMobile: string; DateMobile: string }[] =
-          JSON.parse(poisMatch[1]);
-
-        for (const poi of pois) {
-          const capitalize = (w: string) => {
-            const lower = w.toLowerCase();
-            if (["de", "do", "da", "dos", "das", "a", "e", "o"].includes(lower)) return lower;
-            return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
-          };
-          const concelho = poi.Name.split(" ").map(capitalize).join(" ");
-          const distrito = poi.Address.split(" ").map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+  // Fetch per-concelho data via the SearchStores REST API using Leiria district bounding box
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    const res = await fetch(MEO_SEARCH_API, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        "APIKey": MEO_API_KEY,
+        "Referer": MEO_APP_URL,
+        "Origin": "https://app-ef66ba3b-3a54-42d4-9559-560dd50c913d.apps.meo.pt",
+        "User-Agent": "Mozilla/5.0 (compatible; LeiriaMonitor/1.0; community dashboard)",
+        "Accept": "application/json, text/plain, */*",
+      },
+      body: JSON.stringify(MEO_LEIRIA_BBOX),
+      cache: "no-store",
+    });
+    clearTimeout(timeout);
+    if (res.ok) {
+      const data = await res.json() as { StatusCode: number; Result: { Name: string; Address: string; IsMunicipality: boolean; PercentLandline: string; DateLandline: string; PercentMobile: string; DateMobile: string }[] };
+      if (data.StatusCode === 200 && Array.isArray(data.Result)) {
+        const capitalize = (w: string) => {
+          const lower = w.toLowerCase();
+          if (["de", "do", "da", "dos", "das", "a", "e", "o", "em"].includes(lower)) return lower;
+          return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+        };
+        for (const poi of data.Result) {
+          // Only process Leiria district municipalities (Address is just "LEIRIA" for district entries)
+          if (!poi.IsMunicipality || poi.Address.toUpperCase() !== "LEIRIA") continue;
+          const rawName = poi.Name.replace(/\s*\(Concelho\)\s*/i, "").trim();
+          const concelho = rawName.split(" ").map(capitalize).join(" ");
           const fixaPrevisao = poi.DateLandline?.includes("95%") ? "Disponibilidade >= 95%" : poi.DateLandline ?? "";
           const movelPrevisao = poi.DateMobile?.includes("95%") ? "Disponibilidade >= 95%" : poi.DateMobile ?? "";
-          const entry = {
+          const parseApiPct = (v: string) => { const n = parseInt(v, 10); return isNaN(n) ? null : n; };
+          const entry: MeoConcelhoEntry = {
             concelho,
-            distrito,
-            rede_fixa_pct: parsePercentage(poi.PercentLandline),
+            distrito: "Leiria",
+            rede_fixa_pct: parseApiPct(poi.PercentLandline),
             rede_fixa_previsao: fixaPrevisao,
-            rede_movel_pct: parsePercentage(poi.PercentMobile),
+            rede_movel_pct: parseApiPct(poi.PercentMobile),
             rede_movel_previsao: movelPrevisao,
-            is_leiria_district: distrito === "Leiria",
+            is_leiria_district: true,
           };
           result.concelhos.push(entry);
-          if (entry.is_leiria_district) result.leiria_district.push(entry);
-          if (poi.Name.toUpperCase() === "LEIRIA" && distrito === "Leiria") result.leiria_concelho = entry;
+          result.leiria_district.push(entry);
+          if (rawName.toUpperCase() === "LEIRIA") result.leiria_concelho = entry;
         }
-      } catch { /* JSON parse failed */ }
+        result.success = result.concelhos.length > 0;
+      }
     }
-
-    result.success = result.concelhos.length > 0;
-  } catch { /* scrape failed */ }
+  } catch { /* API fetch failed */ }
 
   return result;
 }
