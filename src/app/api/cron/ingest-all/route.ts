@@ -3,7 +3,6 @@ import { db } from "@/db";
 import {
   ipmaWarnings,
   ipmaForecasts,
-  eredesOutages,
   eredesScheduledWork,
   procivOccurrences,
   procivWarnings,
@@ -18,7 +17,6 @@ import {
   AWARENESS_TYPES,
   AWARENESS_LEVELS,
   EREDES_BASE,
-  EREDES_OUTAGES_DATASET,
   EREDES_SCHEDULED_DATASET,
   LEIRIA_MUNICIPALITIES,
   OCORRENCIAS360_API,
@@ -90,43 +88,19 @@ export async function GET(request: NextRequest) {
     results.ipma = { success: false, error: error.message };
   }
 
-  // 2) E-REDES — outages + scheduled work (feature-flagged)
+  // 2) E-REDES — scheduled work (feature-flagged)
   if (process.env.FEATURE_EREDES_ENABLED !== "true") {
     results.eredes = { success: true, detail: { skipped: true } };
   } else try {
-    const municipalityFilter = LEIRIA_MUNICIPALITIES.map((m) => `municipality = '${m}'`).join(" OR ");
-    const [outagesRes, scheduledRes] = await Promise.allSettled([
-      fetch(
-        `${EREDES_BASE}/catalog/datasets/${EREDES_OUTAGES_DATASET}/records?limit=100&where=${encodeURIComponent(municipalityFilter)}`,
-        { cache: "no-store" }
-      ),
-      fetch(
-        `${EREDES_BASE}/catalog/datasets/${EREDES_SCHEDULED_DATASET}/records?limit=50&where=postalcode LIKE '24%'`,
-        { cache: "no-store" }
-      ),
-    ]);
+    const res = await fetch(
+      `${EREDES_BASE}/catalog/datasets/${EREDES_SCHEDULED_DATASET}/records?limit=50&where=postalcode LIKE '24%'`,
+      { cache: "no-store" }
+    );
 
-    let outagesIngested = 0;
     let scheduledIngested = 0;
 
-    if (outagesRes.status === "fulfilled" && outagesRes.value.ok) {
-      const data = await outagesRes.value.json();
-      const records = data.results ?? [];
-      await db.delete(eredesOutages).where(sql`1=1`);
-      if (records.length > 0) {
-        await db.insert(eredesOutages).values(
-          records.map((r: any) => ({
-            municipality: r.municipality ?? r.municipio ?? "Desconhecido",
-            outageCount: r.count ?? r.total ?? 1,
-            extractionDatetime: r.extractiondatetime ?? r.extraction_datetime ?? null,
-          }))
-        );
-        outagesIngested = records.length;
-      }
-    }
-
-    if (scheduledRes.status === "fulfilled" && scheduledRes.value.ok) {
-      const data = await scheduledRes.value.json();
+    if (res.ok) {
+      const data = await res.json();
       const records = data.results ?? [];
       await db.delete(eredesScheduledWork).where(sql`1=1`);
       if (records.length > 0) {
@@ -145,7 +119,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    results.eredes = { success: true, detail: { outages: outagesIngested, scheduled: scheduledIngested } };
+    results.eredes = { success: true, detail: { scheduled: scheduledIngested } };
   } catch (error: any) {
     results.eredes = { success: false, error: error.message };
   }

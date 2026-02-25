@@ -18,7 +18,6 @@ export const LEIRIA_MUNICIPALITIES = [
 
 
 export const EREDES_BASE = "https://e-redes.opendatasoft.com/api/explore/v2.1";
-export const EREDES_OUTAGES_DATASET = "outages-auxiliar";
 export const EREDES_SCHEDULED_DATASET = "network-scheduling-work";
 export const EREDES_SUBSTATION_DATASET = "diagrama_carga_subestacao_08_a_10";
 export const EREDES_PTD_DATASET = "postos-transformacao-distribuicao";
