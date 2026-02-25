@@ -25,11 +25,13 @@ interface SubstationLoadChartProps {
   baseline: number;
 }
 
-// "2026-01-26 00" -> "26/01 00h"
+// "2026-01-26 00" -> "26/01 00h"  |  "2026-01-26" -> "26/01"
 function formatTime(str: string): string {
-  const parts = str.match(/(\d{4})-(\d{2})-(\d{2})\s+(\d{2})/);
-  if (!parts) return str;
-  return `${parts[3]}/${parts[2]} ${parts[4]}h`;
+  const hourParts = str.match(/(\d{4})-(\d{2})-(\d{2})\s+(\d{2})/);
+  if (hourParts) return `${hourParts[3]}/${hourParts[2]} ${hourParts[4]}h`;
+  const dateParts = str.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (dateParts) return `${dateParts[3]}/${dateParts[2]}`;
+  return str;
 }
 
 export function SubstationLoadChart({

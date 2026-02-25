@@ -48,15 +48,19 @@ export async function GET() {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 55_000);
 
+  // Dynamic end date: today in UTC (data is available with ~1 day lag)
+  const today = new Date();
+  const todayStr = today.toISOString().slice(0, 10); // "YYYY-MM-DD"
+
   try {
-    // Fetch Jan 20 – Feb 3: covers baseline (20-25), storm (28), recovery (29+)
+    // Fetch Jan 20 – today: covers baseline (20-25), storm (28), full recovery
     const hourlyUrl = new URL(
       `${EREDES_BASE}/catalog/datasets/${EREDES_SUBSTATION_DATASET}/records`
     );
     hourlyUrl.searchParams.set("limit", "100");
     hourlyUrl.searchParams.set(
       "where",
-      "distrito='Leiria' AND datahora>='2026-01-20' AND datahora<='2026-02-03'"
+      `distrito='Leiria' AND datahora>='2026-01-20' AND datahora<='${todayStr}'`
     );
     hourlyUrl.searchParams.set(
       "select",
@@ -68,42 +72,38 @@ export async function GET() {
     );
     hourlyUrl.searchParams.set("order_by", "hour");
 
-    // Per-substation latest readings (last day available)
-    const latestUrl = new URL(
-      `${EREDES_BASE}/catalog/datasets/${EREDES_SUBSTATION_DATASET}/records`
-    );
-    latestUrl.searchParams.set("limit", "100");
-    latestUrl.searchParams.set(
-      "where",
-      "distrito='Leiria' AND datahora>='2026-02-02'"
-    );
-    latestUrl.searchParams.set("select", "subestacao,datahora,energia");
-    latestUrl.searchParams.set("order_by", "datahora DESC");
+    // Per-substation latest readings — build URL manually to avoid URLSearchParams
+    // encoding spaces as '+' which the E-REDES raw-record endpoint rejects
+    const latestUrlStr =
+      `${EREDES_BASE}/catalog/datasets/${EREDES_SUBSTATION_DATASET}/records` +
+      `?limit=100` +
+      `&where=${encodeURIComponent(`distrito='Leiria' AND datahora>='2026-01-20'`)}` +
+      `&order_by=datahora%20DESC`;
 
-    // Per-substation hourly data for individual charts
+    // Per-substation daily data for individual charts (daily granularity keeps row count low)
     const perSubHourlyUrl = new URL(
       `${EREDES_BASE}/catalog/datasets/${EREDES_SUBSTATION_DATASET}/records`
     );
     perSubHourlyUrl.searchParams.set("limit", "100");
     perSubHourlyUrl.searchParams.set(
       "where",
-      "distrito='Leiria' AND datahora>='2026-01-20' AND datahora<='2026-02-03'"
+      `distrito='Leiria' AND datahora>='2026-01-20' AND datahora<='${todayStr}'`
     );
     perSubHourlyUrl.searchParams.set(
       "select",
-      "subestacao,date_format(datahora,'yyyy-MM-dd HH') as hour,sum(energia) as total_energia"
+      "subestacao,date_format(datahora,'yyyy-MM-dd') as day,sum(energia) as total_energia"
     );
     perSubHourlyUrl.searchParams.set(
       "group_by",
-      "subestacao,date_format(datahora,'yyyy-MM-dd HH')"
+      "subestacao,date_format(datahora,'yyyy-MM-dd')"
     );
-    perSubHourlyUrl.searchParams.set("order_by", "subestacao,hour");
+    perSubHourlyUrl.searchParams.set("order_by", "subestacao,day");
 
     const [hourlyResults, latestRes, perSubResults] = await Promise.allSettled([
       fetchAllPages(hourlyUrl, controller.signal),
-      fetch(latestUrl.toString(), {
+      fetch(latestUrlStr, {
         signal: controller.signal,
-        next: { revalidate: 300 },
+        cache: "no-store",
       }),
       fetchAllPages(perSubHourlyUrl, controller.signal),
     ]);
@@ -141,7 +141,7 @@ export async function GET() {
       );
     }
 
-    // Actual data: full period Jan 20 - Feb 3
+    // Actual data: full period Jan 20 – today
     const actual = hourlyRaw.map((r) => ({
       time: r.hour,
       totalLoad: Math.round((r.energia / 1000) * 100) / 100,
@@ -204,54 +204,46 @@ export async function GET() {
       );
     }
 
-    // Process per-substation hourly data
+    // Process per-substation daily data
     const perSubstation: Record<
       string,
       { actual: { time: string; totalLoad: number }[]; baseline: number }
     > = {};
     if (perSubResults.status === "fulfilled") {
       // Group raw records by substation
-      const byStation = new Map<string, { hour: string; energia: number }[]>();
+      const byStation = new Map<string, { day: string; energia: number }[]>();
       for (const r of perSubResults.value) {
         const name = (r["subestacao"] as string) ?? "";
-        const hourKey =
-          (r["hour"] as string | null) ||
-          (r["date_format(datahora,'yyyy-MM-dd HH')"] as string | null) ||
+        const dayKey =
+          (r["day"] as string | null) ||
+          (r["date_format(datahora,'yyyy-MM-dd')"] as string | null) ||
           "";
         const energia = (r["total_energia"] as number) ?? 0;
-        if (!name || !hourKey) continue;
+        if (!name || !dayKey) continue;
         const arr = byStation.get(name) ?? [];
-        arr.push({ hour: hourKey, energia });
+        arr.push({ day: dayKey, energia });
         byStation.set(name, arr);
       }
 
       for (const [name, rows] of byStation) {
-        rows.sort((a, b) => a.hour.localeCompare(b.hour));
+        rows.sort((a, b) => a.day.localeCompare(b.day));
 
-        // Per-substation baseline: Jan 20-25 average
-        const blByHour = new Map<number, number[]>();
-        for (const r of rows) {
-          if (r.hour >= "2026-01-20" && r.hour < "2026-01-26") {
-            const hod = parseInt(r.hour.slice(-2), 10);
-            const arr = blByHour.get(hod) ?? [];
-            arr.push(r.energia / 1000);
-            blByHour.set(hod, arr);
-          }
-        }
-        let bl = 0;
-        if (blByHour.size > 0) {
-          const avgValues = [...blByHour.values()].map(
-            (vals) => vals.reduce((a, b) => a + b, 0) / vals.length
-          );
-          bl =
-            Math.round(
-              (avgValues.reduce((a, b) => a + b, 0) / avgValues.length) * 100
-            ) / 100;
-        }
+        // Per-substation baseline: Jan 20-25 daily total average
+        const baselineDays = rows.filter(
+          (r) => r.day >= "2026-01-20" && r.day < "2026-01-26"
+        );
+        const bl =
+          baselineDays.length > 0
+            ? Math.round(
+                (baselineDays.reduce((s, r) => s + r.energia / 1000, 0) /
+                  baselineDays.length) *
+                  100
+              ) / 100
+            : 0;
 
         perSubstation[name] = {
           actual: rows.map((r) => ({
-            time: r.hour,
+            time: r.day,
             totalLoad: Math.round((r.energia / 1000) * 100) / 100,
           })),
           baseline: bl,
