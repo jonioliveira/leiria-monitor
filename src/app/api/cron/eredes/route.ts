@@ -12,10 +12,6 @@ export async function GET(request: NextRequest) {
   const authError = verifyCronSecret(request);
   if (authError) return authError;
 
-  if (process.env.FEATURE_EREDES_ENABLED !== "true") {
-    return NextResponse.json({ success: true, skipped: true, message: "E-REDES data is temporarily disabled" });
-  }
-
   try {
     const res = await fetch(
       `${EREDES_BASE}/catalog/datasets/${EREDES_SCHEDULED_DATASET}/records?limit=50&where=postalcode LIKE '24%'`,

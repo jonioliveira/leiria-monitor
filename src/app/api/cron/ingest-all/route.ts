@@ -88,10 +88,8 @@ export async function GET(request: NextRequest) {
     results.ipma = { success: false, error: error.message };
   }
 
-  // 2) E-REDES — scheduled work (feature-flagged)
-  if (process.env.FEATURE_EREDES_ENABLED !== "true") {
-    results.eredes = { success: true, detail: { skipped: true } };
-  } else try {
+  // 2) E-REDES — scheduled work
+  try {
     const res = await fetch(
       `${EREDES_BASE}/catalog/datasets/${EREDES_SCHEDULED_DATASET}/records?limit=50&where=postalcode LIKE '24%'`,
       { cache: "no-store" }

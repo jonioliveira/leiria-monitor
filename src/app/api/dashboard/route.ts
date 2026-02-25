@@ -15,8 +15,6 @@ import { getAllConcelhos, getParishesByConcelho } from "@/lib/parish-lookup";
 export const revalidate = 60;
 
 export async function GET() {
-  const eredesEnabled = process.env.FEATURE_EREDES_ENABLED === "true";
-
   try {
     // Fetch substation count from E-REDES API
     // Always fetch substation data — it's a direct API call, not gated by feature flag
@@ -53,10 +51,10 @@ export async function GET() {
 
     const [outages, warnings, occurrences, scheduledWork, populationWarnings, substationCount, electricityReports, allActiveReports] =
       await Promise.all([
-        eredesEnabled ? db.select().from(eredesOutages) : Promise.resolve([]),
+        db.select().from(eredesOutages),
         db.select().from(ipmaWarnings),
         db.select().from(procivOccurrences),
-        eredesEnabled ? db.select().from(eredesScheduledWork) : Promise.resolve([]),
+        db.select().from(eredesScheduledWork),
         db.select().from(procivWarnings),
         substationPromise,
         db.select({ parish: userReports.parish })
@@ -87,7 +85,7 @@ export async function GET() {
       electricityStatus = "critical";
     } else if (reportCount > 0 || totalOutages > 0 || (substationCount.total > 0 && substationCount.active < substationCount.total)) {
       electricityStatus = "warning";
-    } else if (substationCount.total > 0 || eredesEnabled) {
+    } else if (substationCount.total > 0) {
       electricityStatus = "ok";
     }
 
