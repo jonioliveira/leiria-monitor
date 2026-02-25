@@ -13,7 +13,8 @@ const OPERATOR_ENDPOINTS = [
 const MEO_APP_URL =
   "https://app-ef66ba3b-3a54-42d4-9559-560dd50c913d.apps.meo.pt/Pages/Default.aspx?SenderId=346DB3AC0";
 const MEO_AVAILABILITY_URL = "https://www.meo.pt/disponibilidade-servicos-meo";
-const NOS_INCIDENTS_URL = "https://www.nos.pt/ocorrencias";
+const NOS_FORUM_URL =
+  "https://forum.nos.pt/novidades-16/depressao-kristin-o-que-precisa-saber-51910";
 const VODAFONE_STATUS_URL = "https://www.vodafone.pt/info/estado-da-rede.html";
 const ANACOM_KRISTIN_URL = "https://www.anacom.pt/render.jsp?contentId=1826541";
 
@@ -159,44 +160,100 @@ async function scrapeMeoAvailability() {
   return result;
 }
 
-async function scrapeNosIncidents() {
+type NosConcelhoEntry = {
+  concelho: string;
+  distrito: string;
+  rede_fixa_pct: number | null;
+  rede_movel_pct: number | null;
+  is_leiria_district: boolean;
+};
+
+async function scrapeNosAvailability() {
+  const result: {
+    success: boolean;
+    concelhos: NosConcelhoEntry[];
+    leiria_district: NosConcelhoEntry[];
+    leiria_concelho: NosConcelhoEntry | null;
+    source_url: string;
+    fetched_at: string;
+  } = {
+    success: false,
+    concelhos: [],
+    leiria_district: [],
+    leiria_concelho: null,
+    source_url: NOS_FORUM_URL,
+    fetched_at: new Date().toISOString(),
+  };
+
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    const res = await fetch(NOS_INCIDENTS_URL, {
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    const res = await fetch(NOS_FORUM_URL, {
       signal: controller.signal,
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; LeiriaMonitor/1.0; community dashboard)", Accept: "text/html" },
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; LeiriaMonitor/1.0; community dashboard)",
+        Accept: "text/html",
+      },
       cache: "no-store",
     });
     clearTimeout(timeout);
-    if (!res.ok) return [];
+    if (!res.ok) return result;
 
     const html = await res.text();
-    const incidents: { operator: string; title: string; description: string; start_date: null; end_date: null; affected_services: string[]; source_url: string }[] = [];
-    const incidentBlockPattern = /<(?:h[2-4]|strong)[^>]*>([^<]*(?:situa[çc][ãa]|interrup[çc][ãa]|ocorr[êe]ncia|avaria|incidente)[^<]*)<\/(?:h[2-4]|strong)>[\s\S]*?<p[^>]*>([\s\S]*?)<\/p>/gi;
-    let match;
-    while ((match = incidentBlockPattern.exec(html)) !== null) {
-      const title = stripHtml(match[1]);
-      const description = stripHtml(match[2]);
-      if (description.toLowerCase().includes("leiria") || description.toLowerCase().includes("centro") || title.toLowerCase().includes("leiria")) {
-        const services: string[] = [];
-        if (/TV|televis/i.test(description)) services.push("TV");
-        if (/internet\s+fixa|rede\s+fixa/i.test(description)) services.push("Internet Fixa");
-        if (/internet\s+m[oó]vel|rede\s+m[oó]vel/i.test(description)) services.push("Internet Móvel");
-        if (/telefone\s+fixo|voz\s+fixa/i.test(description)) services.push("Telefone Fixo");
-        if (/telefone\s+m[oó]vel|voz\s+m[oó]vel/i.test(description)) services.push("Telefone Móvel");
-        incidents.push({ operator: "NOS", title: title || "Ocorrência NOS", description, start_date: null, end_date: null, affected_services: services.length > 0 ? services : ["Vários serviços"], source_url: NOS_INCIDENTS_URL });
+
+    // Locate the content-spoiler table
+    const spoilerIdx = html.indexOf("content-spoiler");
+    if (spoilerIdx === -1) return result;
+    const tableStart = html.indexOf("<table", spoilerIdx);
+    const tableEnd = html.indexOf("</table>", tableStart);
+    if (tableStart === -1 || tableEnd === -1) return result;
+    const tableHtml = html.slice(tableStart, tableEnd + "</table>".length);
+
+    // Parse rows — district-first rows have 4 <td>s (district+rowspan, concelho, fixa%, movel%)
+    // continuation rows have 3 <td>s (concelho, fixa%, movel%)
+    let currentDistrito = "";
+    for (const row of tableHtml.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)) {
+      const rowContent = row[1];
+      if (/<th/i.test(rowContent)) continue; // skip header row
+
+      const cells = [...rowContent.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map((m) =>
+        stripHtml(m[1]).trim()
+      );
+
+      if (cells.length === 4) {
+        currentDistrito = cells[0];
+        const entry: NosConcelhoEntry = {
+          distrito: currentDistrito,
+          concelho: cells[1],
+          rede_fixa_pct: parsePercentage(cells[2]),
+          rede_movel_pct: parsePercentage(cells[3]),
+          is_leiria_district: currentDistrito.toLowerCase() === "leiria",
+        };
+        result.concelhos.push(entry);
+        if (entry.is_leiria_district) result.leiria_district.push(entry);
+        if (entry.is_leiria_district && entry.concelho.toLowerCase() === "leiria") {
+          result.leiria_concelho = entry;
+        }
+      } else if (cells.length === 3 && currentDistrito) {
+        const entry: NosConcelhoEntry = {
+          distrito: currentDistrito,
+          concelho: cells[0],
+          rede_fixa_pct: parsePercentage(cells[1]),
+          rede_movel_pct: parsePercentage(cells[2]),
+          is_leiria_district: currentDistrito.toLowerCase() === "leiria",
+        };
+        result.concelhos.push(entry);
+        if (entry.is_leiria_district) result.leiria_district.push(entry);
+        if (entry.is_leiria_district && entry.concelho.toLowerCase() === "leiria") {
+          result.leiria_concelho = entry;
+        }
       }
     }
-    if (incidents.length === 0) {
-      const simpleLeiriaPattern = /<p[^>]*>([^<]*(?:Leiria)[^<]*)<\/p>/gi;
-      while ((match = simpleLeiriaPattern.exec(html)) !== null) {
-        const text = stripHtml(match[1]);
-        if (text.length > 20) { incidents.push({ operator: "NOS", title: "Ocorrência ativa — região de Leiria", description: text, start_date: null, end_date: null, affected_services: ["Vários serviços"], source_url: NOS_INCIDENTS_URL }); break; }
-      }
-    }
-    return incidents;
-  } catch { return []; }
+
+    result.success = result.concelhos.length > 0;
+  } catch { /* scrape failed */ }
+
+  return result;
 }
 
 async function scrapeVodafoneStatus() {
@@ -243,20 +300,21 @@ async function scrapeVodafoneStatus() {
 }
 
 export async function fetchTelecomData() {
-  const [operatorResults, meoAvailability, nosIncidents, vodafoneIncidents] = await Promise.all([
+  const [operatorResults, meoAvailability, nosAvailability, vodafoneIncidents] = await Promise.all([
     Promise.all(OPERATOR_ENDPOINTS.map(checkEndpoint)),
     scrapeMeoAvailability(),
-    scrapeNosIncidents(),
+    scrapeNosAvailability(),
     scrapeVodafoneStatus(),
   ]);
 
   return {
     success: true,
     timestamp: new Date().toISOString(),
-    source: "Connectivity checks + MEO Disponibilidade + NOS Ocorrências + Vodafone Estado da Rede + ANACOM data",
+    source: "Connectivity checks + MEO Disponibilidade + NOS Forum Kristin + Vodafone Estado da Rede + ANACOM data",
     operators: operatorResults,
-    operator_incidents: [...nosIncidents, ...vodafoneIncidents],
+    operator_incidents: [...vodafoneIncidents],
     meo_availability: meoAvailability,
+    nos_availability: nosAvailability,
     kristin_impact: {
       last_known_affected_clients: 147000,
       last_known_date: "2026-02-03",
