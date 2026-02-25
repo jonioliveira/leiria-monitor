@@ -23,6 +23,7 @@ import {
   Waves,
   Trash2,
   HelpCircle,
+  Signal,
 } from "lucide-react";
 import { parseConcelhoSlug, slugify } from "@/lib/slug-utils";
 import type { AreaDashboardData } from "@/lib/types";
@@ -263,6 +264,52 @@ function ConcelhoPageInner({ slug }: { slug: string }) {
           <ArrowLeft className="h-3.5 w-3.5" />
           Ver todo o concelho de {concelhoName}
         </Link>
+      )}
+
+      {/* Telecom coverage */}
+      {data?.telecom && (data.telecom.meo || data.telecom.nos || data.telecom.vodafone) && (
+        <div>
+          <h2 className="mb-3 text-sm font-semibold text-foreground flex items-center gap-2">
+            <Signal className="h-4 w-4 text-sky-400" />
+            Cobertura de telecomunicações
+          </h2>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {[
+              { key: "meo", label: "MEO", color: "text-sky-400", entry: data.telecom.meo },
+              { key: "nos", label: "NOS", color: "text-orange-400", entry: data.telecom.nos },
+              { key: "vodafone", label: "Vodafone", color: "text-red-400", entry: data.telecom.vodafone },
+            ].map(({ key, label, color, entry }) =>
+              entry ? (
+                <Card key={key}>
+                  <CardContent className="py-3 px-4 space-y-1.5">
+                    <p className={`text-xs font-semibold ${color}`}>{label}</p>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Telemóvel</span>
+                      <span className={`font-medium ${entry.rede_movel_pct != null && entry.rede_movel_pct < 80 ? "text-red-400" : entry.rede_movel_pct != null && entry.rede_movel_pct < 95 ? "text-yellow-400" : "text-emerald-400"}`}>
+                        {entry.rede_movel_pct != null ? `${entry.rede_movel_pct}%` : "—"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Internet de casa</span>
+                      <span className={`font-medium ${entry.rede_fixa_pct != null && entry.rede_fixa_pct < 80 ? "text-red-400" : entry.rede_fixa_pct != null && entry.rede_fixa_pct < 95 ? "text-yellow-400" : "text-emerald-400"}`}>
+                        {entry.rede_fixa_pct != null ? `${entry.rede_fixa_pct}%` : "—"}
+                      </span>
+                    </div>
+                    {(() => {
+                      const e = entry as { rede_movel_previsao?: string; rede_fixa_previsao?: string };
+                      const previsao = e.rede_movel_previsao || e.rede_fixa_previsao;
+                      return previsao ? (
+                        <p className="text-[11px] text-muted-foreground truncate">
+                          Previsão: {previsao}
+                        </p>
+                      ) : null;
+                    })()}
+                  </CardContent>
+                </Card>
+              ) : null
+            )}
+          </div>
+        </div>
       )}
 
       {/* Recent reports */}
