@@ -295,6 +295,11 @@ export interface AreaDashboardData {
   }[];
   transformers: { total: number; avgUsage: string | null } | null;
   parishes: string[];
+  telecom: {
+    meo: { rede_fixa_pct: number | null; rede_movel_pct: number | null; rede_fixa_previsao: string; rede_movel_previsao: string } | null;
+    nos: { rede_fixa_pct: number | null; rede_movel_pct: number | null } | null;
+    vodafone: { rede_fixa_pct: number | null; rede_movel_pct: number | null; rede_fixa_previsao: string; rede_movel_previsao: string } | null;
+  } | null;
 }
 
 export interface CalamityInfo {
