@@ -15,7 +15,8 @@ const MEO_APP_URL =
 const MEO_AVAILABILITY_URL = "https://www.meo.pt/disponibilidade-servicos-meo";
 const NOS_FORUM_URL =
   "https://forum.nos.pt/novidades-16/depressao-kristin-o-que-precisa-saber-51910";
-const VODAFONE_STATUS_URL = "https://www.vodafone.pt/info/estado-da-rede.html";
+const VODAFONE_KRISTIN_URL =
+  "https://ajuda.vodafone.pt/perguntas-frequentes/calamidade-kristin-estado-de-recuperacao-de-servicos-por-concelho";
 const ANACOM_KRISTIN_URL = "https://www.anacom.pt/render.jsp?contentId=1826541";
 
 function parsePercentage(text: string): number | null {
@@ -256,65 +257,125 @@ async function scrapeNosAvailability() {
   return result;
 }
 
-async function scrapeVodafoneStatus() {
+type VodafoneConcelhoEntry = {
+  concelho: string;
+  distrito: string;
+  rede_fixa_pct: number | null;
+  rede_fixa_previsao: string;
+  rede_movel_pct: number | null;
+  rede_movel_previsao: string;
+  is_leiria_district: boolean;
+};
+
+async function scrapeVodafoneAvailability() {
+  const result: {
+    success: boolean;
+    concelhos: VodafoneConcelhoEntry[];
+    leiria_district: VodafoneConcelhoEntry[];
+    leiria_concelho: VodafoneConcelhoEntry | null;
+    source_url: string;
+    fetched_at: string;
+  } = {
+    success: false,
+    concelhos: [],
+    leiria_district: [],
+    leiria_concelho: null,
+    source_url: VODAFONE_KRISTIN_URL,
+    fetched_at: new Date().toISOString(),
+  };
+
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    const res = await fetch(VODAFONE_STATUS_URL, {
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    const res = await fetch(VODAFONE_KRISTIN_URL, {
       signal: controller.signal,
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; LeiriaMonitor/1.0; community dashboard)", Accept: "text/html" },
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; LeiriaMonitor/1.0; community dashboard)",
+        Accept: "text/html",
+      },
       cache: "no-store",
     });
     clearTimeout(timeout);
-    if (!res.ok) return [];
+    if (!res.ok) return result;
 
     const html = await res.text();
-    const incidents: { operator: string; title: string; description: string; start_date: string | null; end_date: string | null; affected_services: string[]; source_url: string }[] = [];
-    const jsonDataPattern = /(?:window\.__INITIAL_STATE__|window\.__NUXT__|data-page="|:incidents="|v-bind:incidents=").*?(\[[\s\S]*?\])/i;
-    const jsonMatch = html.match(jsonDataPattern);
-    if (jsonMatch) {
-      try {
-        const data = JSON.parse(jsonMatch[1]);
-        if (Array.isArray(data)) {
-          for (const item of data) {
-            const title = item.title ?? item.titulo ?? item.name ?? "";
-            const desc = item.description ?? item.descricao ?? item.message ?? item.mensagem ?? "";
-            if (title || desc) incidents.push({ operator: "Vodafone", title: stripHtml(title) || "Incidente Vodafone", description: stripHtml(desc), start_date: item.startDate ?? null, end_date: item.endDate ?? null, affected_services: [], source_url: VODAFONE_STATUS_URL });
-          }
-        }
-      } catch { /* JSON parse failed */ }
-    }
-    if (incidents.length === 0) {
-      const noIncidents = /[Ss]em\s+registo\s+de\s+ocorr[eê]ncias/i.test(html);
-      if (!noIncidents) {
-        const incidentPattern = /<(?:div|article|section)[^>]*class="[^"]*incident[^"]*"[^>]*>([\s\S]*?)<\/(?:div|article|section)>/gi;
-        let match;
-        while ((match = incidentPattern.exec(html)) !== null) {
-          const content = stripHtml(match[1]);
-          if (content.length > 20) incidents.push({ operator: "Vodafone", title: "Incidente Vodafone", description: content.substring(0, 300), start_date: null, end_date: null, affected_services: [], source_url: VODAFONE_STATUS_URL });
-        }
+
+    const tableStart = html.indexOf("<table");
+    const tableEnd = html.indexOf("</table>", tableStart);
+    if (tableStart === -1 || tableEnd === -1) return result;
+    const tableHtml = html.slice(tableStart, tableEnd + "</table>".length);
+
+    // Rows: 6 cells = district-first [district, concelho, fixa_pct, fixa_previsao, movel_pct, movel_previsao]
+    //       5 cells = continuation   [concelho, fixa_pct, fixa_previsao, movel_pct, movel_previsao]
+    let currentDistrito = "";
+    for (const row of tableHtml.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)) {
+      const rowContent = row[1];
+      if (/<th/i.test(rowContent)) continue; // skip header rows
+
+      const cells = [...rowContent.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map((m) =>
+        stripHtml(m[1]).trim()
+      );
+
+      let concelho: string, fixa_pct: number | null, fixa_previsao: string,
+          movel_pct: number | null, movel_previsao: string;
+
+      if (cells.length === 6) {
+        currentDistrito = cells[0];
+        concelho = cells[1];
+        fixa_pct = parsePercentage(cells[2]);
+        fixa_previsao = cells[3];
+        movel_pct = parsePercentage(cells[4]);
+        movel_previsao = cells[5];
+      } else if (cells.length === 5 && currentDistrito) {
+        concelho = cells[0];
+        fixa_pct = parsePercentage(cells[1]);
+        fixa_previsao = cells[2];
+        movel_pct = parsePercentage(cells[3]);
+        movel_previsao = cells[4];
+      } else {
+        continue; // header sub-row or unknown shape
+      }
+
+      if (!concelho) continue;
+      const entry: VodafoneConcelhoEntry = {
+        distrito: currentDistrito,
+        concelho,
+        rede_fixa_pct: fixa_pct,
+        rede_fixa_previsao: fixa_previsao,
+        rede_movel_pct: movel_pct,
+        rede_movel_previsao: movel_previsao,
+        is_leiria_district: currentDistrito.toLowerCase() === "leiria",
+      };
+      result.concelhos.push(entry);
+      if (entry.is_leiria_district) result.leiria_district.push(entry);
+      if (entry.is_leiria_district && entry.concelho.toLowerCase() === "leiria") {
+        result.leiria_concelho = entry;
       }
     }
-    return incidents;
-  } catch { return []; }
+
+    result.success = result.concelhos.length > 0;
+  } catch { /* scrape failed */ }
+
+  return result;
 }
 
 export async function fetchTelecomData() {
-  const [operatorResults, meoAvailability, nosAvailability, vodafoneIncidents] = await Promise.all([
+  const [operatorResults, meoAvailability, nosAvailability, vodafoneAvailability] = await Promise.all([
     Promise.all(OPERATOR_ENDPOINTS.map(checkEndpoint)),
     scrapeMeoAvailability(),
     scrapeNosAvailability(),
-    scrapeVodafoneStatus(),
+    scrapeVodafoneAvailability(),
   ]);
 
   return {
     success: true,
     timestamp: new Date().toISOString(),
-    source: "Connectivity checks + MEO Disponibilidade + NOS Forum Kristin + Vodafone Estado da Rede + ANACOM data",
+    source: "Connectivity checks + MEO Disponibilidade + NOS Forum Kristin + Vodafone Ajuda Kristin + ANACOM data",
     operators: operatorResults,
-    operator_incidents: [...vodafoneIncidents],
+    operator_incidents: [],
     meo_availability: meoAvailability,
     nos_availability: nosAvailability,
+    vodafone_availability: vodafoneAvailability,
     kristin_impact: {
       last_known_affected_clients: 147000,
       last_known_date: "2026-02-03",

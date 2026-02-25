@@ -77,6 +77,16 @@ interface NosConcelhoData {
   is_leiria_district: boolean;
 }
 
+interface VodafoneConcelhoData {
+  concelho: string;
+  distrito: string;
+  rede_fixa_pct: number | null;
+  rede_fixa_previsao: string;
+  rede_movel_pct: number | null;
+  rede_movel_previsao: string;
+  is_leiria_district: boolean;
+}
+
 interface TelecomData {
   success: boolean;
   timestamp: string;
@@ -93,6 +103,13 @@ interface TelecomData {
     success: boolean;
     leiria_district: NosConcelhoData[];
     leiria_concelho: NosConcelhoData | null;
+    source_url: string;
+    fetched_at: string;
+  };
+  vodafone_availability?: {
+    success: boolean;
+    leiria_district: VodafoneConcelhoData[];
+    leiria_concelho: VodafoneConcelhoData | null;
     source_url: string;
     fetched_at: string;
   };
@@ -223,8 +240,26 @@ export default function RecoveryPage() {
     [nosLeiriaDistrict]
   );
 
-  // Use MEO data for overall status; fall back to NOS when MEO unavailable
-  const effectiveDistrict = leiriaDistrict.length > 0 ? leiriaDistrict : nosLeiriaDistrict;
+  const vodafoneLeiriaDistrict = useMemo(
+    () => telecomData?.vodafone_availability?.leiria_district ?? [],
+    [telecomData]
+  );
+
+  const sortedVodafoneConcelhos = useMemo(
+    () =>
+      [...vodafoneLeiriaDistrict].sort((a, b) => {
+        const aPct = a.rede_movel_pct ?? 999;
+        const bPct = b.rede_movel_pct ?? 999;
+        return aPct - bPct;
+      }),
+    [vodafoneLeiriaDistrict]
+  );
+
+  // Use MEO data for overall status; fall back to NOS or Vodafone when MEO unavailable
+  const effectiveDistrict =
+    leiriaDistrict.length > 0 ? leiriaDistrict :
+    nosLeiriaDistrict.length > 0 ? nosLeiriaDistrict :
+    vodafoneLeiriaDistrict;
   const overallStatus = useMemo(() => getOverallStatus(effectiveDistrict), [effectiveDistrict]);
 
   /* Derive report counts */
@@ -593,12 +628,74 @@ export default function RecoveryPage() {
               </CardContent>
             </Card>
           )}
+
+          {/* Vodafone coverage table */}
+          {vodafoneLeiriaDistrict.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Signal className="h-5 w-5 text-red-400" />
+                  <span>Cobertura Vodafone por concelho</span>
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">Fonte: Vodafone — Storm Kristin</p>
+              </CardHeader>
+              <CardContent>
+                {/* Desktop table */}
+                <div className="hidden overflow-x-auto sm:block">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Concelho</TableHead>
+                        <TableHead className="text-center">Telemóvel</TableHead>
+                        <TableHead className="text-center">Internet de casa</TableHead>
+                        <TableHead>Previsão normalização</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sortedVodafoneConcelhos.map((c) => (
+                        <TableRow key={c.concelho}>
+                          <TableCell className="font-medium text-base">{c.concelho}</TableCell>
+                          <TableCell className="text-center">{getCoverageBadge(c.rede_movel_pct)}</TableCell>
+                          <TableCell className="text-center">{getCoverageBadge(c.rede_fixa_pct)}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {c.rede_movel_previsao || c.rede_fixa_previsao || "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Mobile cards */}
+                <div className="space-y-3 sm:hidden">
+                  {sortedVodafoneConcelhos.map((c) => (
+                    <div key={c.concelho} className="rounded-lg border border-border p-4 space-y-2">
+                      <p className="text-base font-semibold text-foreground">{c.concelho}</p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Telemóvel</span>
+                        {getCoverageBadge(c.rede_movel_pct)}
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Internet de casa</span>
+                        {getCoverageBadge(c.rede_fixa_pct)}
+                      </div>
+                      {(c.rede_movel_previsao || c.rede_fixa_previsao) && (
+                        <p className="text-xs text-muted-foreground">
+                          Previsão: {c.rede_movel_previsao || c.rede_fixa_previsao}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
       {/* Source */}
       <p className="text-xs text-muted-foreground">
-        Fontes: Reportes de utilizadores · E-REDES Open Data Portal · MEO Disponibilidade · NOS Storm Kristin
+        Fontes: Reportes de utilizadores · E-REDES Open Data Portal · MEO Disponibilidade · NOS Storm Kristin · Vodafone Storm Kristin
       </p>
     </div>
   );
