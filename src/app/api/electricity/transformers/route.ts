@@ -1,98 +1,48 @@
+import { after } from "next/server";
 import { NextResponse } from "next/server";
-import {
-  EREDES_BASE,
-  EREDES_PTD_DATASET,
-  LEIRIA_MUNICIPALITIES,
-} from "@/lib/constants";
+import { db } from "@/db";
+import { transformerCache } from "@/db/schema";
+import { fetchTransformerData } from "@/lib/transformer-fetcher";
+import { desc } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
-export const revalidate = 3600; // 1 hour — PTD data is static
+const STALE_AFTER_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+async function refreshCache() {
+  try {
+    const data = await fetchTransformerData();
+    await db.delete(transformerCache).where(sql`1=1`);
+    await db.insert(transformerCache).values({ data });
+  } catch {
+    // Background refresh failure is silent — cached data keeps being served
+  }
+}
 
 export async function GET() {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30_000);
-
   try {
-    // Build IN clause for Leiria municipalities
-    const inClause = LEIRIA_MUNICIPALITIES.map((m) => `'${m}'`).join(",");
-    const where = `con_name IN (${inClause})`;
+    const rows = await db
+      .select()
+      .from(transformerCache)
+      .orderBy(desc(transformerCache.fetchedAt))
+      .limit(1);
 
-    // Fetch first page to get total count
-    const baseUrl = new URL(
-      `${EREDES_BASE}/catalog/datasets/${EREDES_PTD_DATASET}/records`
-    );
-    baseUrl.searchParams.set("limit", "100");
-    baseUrl.searchParams.set("where", where);
-    baseUrl.searchParams.set(
-      "select",
-      "cod_instalacao,coordenadas_geo,potencia_transformacao_kva,nivel_utilizacao,num_clientes,con_name"
-    );
+    const cached = rows[0] ?? null;
 
-    const firstRes = await fetch(baseUrl.toString(), {
-      signal: controller.signal,
-      next: { revalidate: 3600 },
-    });
-    if (!firstRes.ok) {
-      throw new Error(`E-REDES API responded with ${firstRes.status}`);
-    }
-    const firstJson = await firstRes.json();
-    const total = firstJson.total_count ?? 0;
-    const allResults = [...(firstJson.results ?? [])];
-
-    // Fetch remaining pages in parallel batches
-    const offsets: number[] = [];
-    for (let o = 100; o < total; o += 100) {
-      offsets.push(o);
+    if (!cached) {
+      // Cold start: no cache yet — fetch synchronously
+      const data = await fetchTransformerData();
+      await db.insert(transformerCache).values({ data });
+      return NextResponse.json(data);
     }
 
-    // Fetch in batches of 10 concurrent requests
-    for (let i = 0; i < offsets.length; i += 10) {
-      const batch = offsets.slice(i, i + 10);
-      const results = await Promise.allSettled(
-        batch.map((offset) => {
-          const pageUrl = new URL(baseUrl.toString());
-          pageUrl.searchParams.set("offset", String(offset));
-          return fetch(pageUrl.toString(), {
-            signal: controller.signal,
-            next: { revalidate: 3600 },
-          });
-        })
-      );
-      for (const r of results) {
-        if (r.status === "fulfilled" && r.value.ok) {
-          const json = await r.value.json();
-          allResults.push(...(json.results ?? []));
-        }
-      }
+    const ageMs = Date.now() - new Date(cached.fetchedAt).getTime();
+    if (ageMs > STALE_AFTER_MS) {
+      after(refreshCache);
     }
 
-    // Transform to lightweight markers
-    const transformers = allResults
-      .filter(
-        (r: Record<string, unknown>) =>
-          r.coordenadas_geo != null
-      )
-      .map((r: Record<string, unknown>) => {
-        const geo = r.coordenadas_geo as { lat: number; lon: number };
-        return {
-          id: (r.cod_instalacao as string) ?? "",
-          lat: geo.lat,
-          lng: geo.lon,
-          kva: (r.potencia_transformacao_kva as number) ?? 0,
-          usage: (r.nivel_utilizacao as string) ?? "N/D",
-          clients: parseInt((r.num_clientes as string) ?? "0", 10) || 0,
-          municipality: (r.con_name as string) ?? "",
-        };
-      });
-
-    return NextResponse.json({
-      success: true,
-      timestamp: new Date().toISOString(),
-      total: transformers.length,
-      transformers,
-    });
+    return NextResponse.json(cached.data);
   } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : "Unknown error";
+    const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
       {
         success: false,
@@ -103,7 +53,5 @@ export async function GET() {
       },
       { status: 500 }
     );
-  } finally {
-    clearTimeout(timeout);
   }
 }
