@@ -105,6 +105,8 @@ function MapaPageInner() {
   const [mapBounds, setMapBounds] = useState<{ minLat: number; maxLat: number; minLng: number; maxLng: number } | null>(null);
   const [mapZoom, setMapZoom] = useState(10);
   const poleFetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const transformersFetched = useRef(false);
+  const antennasFetched = useRef(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [flyTo, setFlyTo] = useState<{ lat: number; lng: number; zoom: number } | null>(null);
   const [locating, setLocating] = useState(false);
@@ -112,7 +114,7 @@ function MapaPageInner() {
   const deepLinkHandled = useRef(false);
 
   const [visibleLayers, setVisibleLayers] = useState<Set<string>>(
-    new Set(["transformers", "antennas", "reports"])
+    new Set(["reports"])
   );
   const [visibleOperators, setVisibleOperators] = useState<Set<string>>(
     new Set(ALL_OPERATORS)
@@ -276,26 +278,11 @@ function MapaPageInner() {
   useEffect(() => {
     async function load() {
       try {
-        const [reportsRes, ptdRes, antRes] = await Promise.allSettled([
-          fetch("/api/reports"),
-          fetch("/api/electricity/transformers"),
-          fetch("/api/antennas"),
-        ]);
-
-        if (reportsRes.status === "fulfilled" && reportsRes.value.ok) {
-          const reportsData = await reportsRes.value.json();
-          setReports(reportsData.reports ?? []);
-          setHotspots(reportsData.hotspots ?? []);
-        }
-
-        if (ptdRes.status === "fulfilled" && ptdRes.value.ok) {
-          const ptdData = await ptdRes.value.json();
-          setTransformers(ptdData.transformers ?? []);
-        }
-
-        if (antRes.status === "fulfilled" && antRes.value.ok) {
-          const antData = await antRes.value.json();
-          setAntennas(antData.antennas ?? []);
+        const res = await fetch("/api/reports");
+        if (res.ok) {
+          const data = await res.json();
+          setReports(data.reports ?? []);
+          setHotspots(data.hotspots ?? []);
         }
       } catch {
         // silent fail
@@ -306,6 +293,25 @@ function MapaPageInner() {
 
     load();
   }, []);
+
+  // Lazy-load transformers and antennas only when their layer is first enabled
+  useEffect(() => {
+    if (visibleLayers.has("transformers") && !transformersFetched.current) {
+      transformersFetched.current = true;
+      fetch("/api/electricity/transformers")
+        .then((res) => res.ok ? res.json() : null)
+        .then((data) => { if (data) setTransformers(data.transformers ?? []); })
+        .catch(() => {});
+    }
+
+    if (visibleLayers.has("antennas") && !antennasFetched.current) {
+      antennasFetched.current = true;
+      fetch("/api/antennas")
+        .then((res) => res.ok ? res.json() : null)
+        .then((data) => { if (data) setAntennas(data.antennas ?? []); })
+        .catch(() => {});
+    }
+  }, [visibleLayers]);
 
   function toggleLayer(layer: string) {
     setVisibleLayers((prev) => {
