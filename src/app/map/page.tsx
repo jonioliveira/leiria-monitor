@@ -9,7 +9,7 @@ import type { InfraContext } from "@/components/report-panel";
 import Link from "next/link";
 import {
   MapPin, Radio, Activity, MessageSquarePlus, Check, LocateFixed,
-  Search, Zap, Wifi, Globe, Droplets, Construction, ThumbsUp, CheckCircle, Map, List, Share2, ChevronRight,
+  Search, Zap, Wifi, Globe, Droplets, Construction, ThumbsUp, CheckCircle, Map, List, Share2, ChevronRight, Loader2,
 } from "lucide-react";
 import { slugify } from "@/lib/slug-utils";
 import type {
@@ -107,6 +107,7 @@ function MapaPageInner() {
   const poleFetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transformersFetched = useRef(false);
   const antennasFetched = useRef(false);
+  const [loadingLayers, setLoadingLayers] = useState<Set<string>>(new Set());
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [flyTo, setFlyTo] = useState<{ lat: number; lng: number; zoom: number } | null>(null);
   const [locating, setLocating] = useState(false);
@@ -298,20 +299,35 @@ function MapaPageInner() {
   useEffect(() => {
     if (visibleLayers.has("transformers") && !transformersFetched.current) {
       transformersFetched.current = true;
+      setLoadingLayers((prev) => new Set([...prev, "transformers"]));
+      fetch("/api/electricity/transformers")
+        .then((res) => res.ok ? res.json() : null)
+        .then((data) => { if (data) setTransformers(data.transformers ?? []); })
+        .catch(() => {})
+        .finally(() => setLoadingLayers((prev) => { const s = new Set(prev); s.delete("transformers"); return s; }));
+    }
+
+    if (visibleLayers.has("antennas") && !antennasFetched.current) {
+      antennasFetched.current = true;
+      setLoadingLayers((prev) => new Set([...prev, "antennas"]));
+      fetch("/api/antennas")
+        .then((res) => res.ok ? res.json() : null)
+        .then((data) => { if (data) setAntennas(data.antennas ?? []); })
+        .catch(() => {})
+        .finally(() => setLoadingLayers((prev) => { const s = new Set(prev); s.delete("antennas"); return s; }));
+    }
+  }, [visibleLayers]);
+
+  // Fetch transformers when list view opens — needed for concelho resolution in enrichedReports
+  useEffect(() => {
+    if (view === "list" && !transformersFetched.current) {
+      transformersFetched.current = true;
       fetch("/api/electricity/transformers")
         .then((res) => res.ok ? res.json() : null)
         .then((data) => { if (data) setTransformers(data.transformers ?? []); })
         .catch(() => {});
     }
-
-    if (visibleLayers.has("antennas") && !antennasFetched.current) {
-      antennasFetched.current = true;
-      fetch("/api/antennas")
-        .then((res) => res.ok ? res.json() : null)
-        .then((data) => { if (data) setAntennas(data.antennas ?? []); })
-        .catch(() => {});
-    }
-  }, [visibleLayers]);
+  }, [view]);
 
   function toggleLayer(layer: string) {
     setVisibleLayers((prev) => {
@@ -467,6 +483,7 @@ function MapaPageInner() {
             <div className="flex flex-wrap gap-1.5">
               {ALL_LAYERS.map((layer) => {
                 const active = visibleLayers.has(layer);
+                const isLoading = loadingLayers.has(layer);
                 const cfg = LAYER_LABELS[layer];
                 const Icon = cfg.icon;
                 return (
@@ -479,7 +496,10 @@ function MapaPageInner() {
                         : "bg-background/90 text-muted-foreground hover:bg-accent border border-border"
                     }`}
                   >
-                    <Icon className="h-3.5 w-3.5" />
+                    {isLoading
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <Icon className="h-3.5 w-3.5" />
+                    }
                     {cfg.label}
                   </button>
                 );
