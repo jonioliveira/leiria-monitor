@@ -1,6 +1,7 @@
 {
   "crons": [
     { "path": "/api/cron/ingest-all", "schedule": "0 0 * * *" },
-    { "path": "/api/cron/telecom", "schedule": "*/15 * * * *" }
+    { "path": "/api/cron/telecom", "schedule": "*/15 * * * *" },
+    { "path": "/api/cron/substations", "schedule": "0 */6 * * *" }
   ]
 }
