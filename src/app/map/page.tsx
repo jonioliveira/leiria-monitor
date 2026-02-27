@@ -695,21 +695,21 @@ function MapaPageInner() {
                           <div className="flex shrink-0 flex-col gap-1 sm:flex-row">
                             <button
                               onClick={() => handleUpvote(r.id)}
-                              className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-blue-400 transition-colors hover:bg-blue-400/10"
+                              className="flex min-h-[44px] items-center gap-1 rounded-md border border-border px-2.5 py-2 text-xs font-medium text-blue-400 transition-colors hover:bg-blue-400/10 sm:min-h-0 sm:py-1.5"
                             >
                               <ThumbsUp className="h-3.5 w-3.5" />
                               <span className="hidden sm:inline">Confirmo</span>
                             </button>
                             <button
                               onClick={() => handleResolve(r.id)}
-                              className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-emerald-400 transition-colors hover:bg-emerald-400/10"
+                              className="flex min-h-[44px] items-center gap-1 rounded-md border border-border px-2.5 py-2 text-xs font-medium text-emerald-400 transition-colors hover:bg-emerald-400/10 sm:min-h-0 sm:py-1.5"
                             >
                               <CheckCircle className="h-3.5 w-3.5" />
                               <span className="hidden sm:inline">Resolvido</span>
                             </button>
                             <button
                               onClick={() => handleShare(r.id)}
-                              className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent"
+                              className="flex min-h-[44px] items-center gap-1 rounded-md border border-border px-2.5 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent sm:min-h-0 sm:py-1.5"
                             >
                               <Share2 className="h-3.5 w-3.5" />
                             </button>

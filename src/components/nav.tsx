@@ -18,7 +18,7 @@ export function Nav() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-md">
+    <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-md pt-safe">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link
           href="/"
@@ -53,7 +53,7 @@ export function Nav() {
 
         {/* Mobile hamburger */}
         <button
-          className="rounded-md p-2 text-muted-foreground hover:bg-accent sm:hidden"
+          className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground hover:bg-accent sm:hidden"
           onClick={() => setMobileOpen(!mobileOpen)}
           aria-label="Menu"
         >
