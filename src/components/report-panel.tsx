@@ -3,8 +3,9 @@
 import { useState, useRef } from "react";
 import {
   Zap, Wifi, Globe, Droplets, Construction, X, ThumbsUp, MapPin, Camera, Loader2,
-  Smartphone, HelpCircle, TreePine, AlertTriangle, Waves, Trash2,
+  Smartphone, HelpCircle, TreePine, AlertTriangle, Waves, Trash2, WifiOff,
 } from "lucide-react";
+import { queueReport } from "@/lib/report-queue";
 
 type ReportCategory = "electricity" | "telecom" | "roads" | "water" | "other";
 export type ReportType =
@@ -84,6 +85,7 @@ export function ReportPanel({ lat, lng, open, onClose, onSubmitted, infraContext
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submittedPriority, setSubmittedPriority] = useState<string | null>(null);
+  const [queuedOffline, setQueuedOffline] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [fallenPole, setFallenPole] = useState(false);
@@ -114,33 +116,36 @@ export function ReportPanel({ lat, lng, open, onClose, onSubmitted, infraContext
     e.preventDefault();
     if (!lat || !lng) return;
 
+    const reportData = {
+      type: effectiveType,
+      operator: effectiveType.startsWith("telecom") ? effectiveOperator : null,
+      description: (() => {
+        const tag = fallenPole
+          ? (poleHasPower ? "[POSTE CAÍDO COM CORRENTE]" : "[POSTE CAÍDO]")
+          : null;
+        const desc = formDescription || null;
+        if (tag && desc) return `${tag} ${desc}`;
+        if (tag) return tag;
+        return desc;
+      })(),
+      street: infraContext ? infraContext.label : (formStreet || null),
+      lat,
+      lng,
+      imageUrl,
+    };
+
     setSubmitting(true);
     try {
       const res = await fetch("/api/reports", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: effectiveType,
-          operator: effectiveType.startsWith("telecom") ? effectiveOperator : null,
-          description: (() => {
-            const tag = fallenPole
-              ? (poleHasPower ? "[POSTE CAÍDO COM CORRENTE]" : "[POSTE CAÍDO]")
-              : null;
-            const desc = formDescription || null;
-            if (tag && desc) return `${tag} ${desc}`;
-            if (tag) return tag;
-            return desc;
-          })(),
-          street: infraContext ? infraContext.label : (formStreet || null),
-          lat,
-          lng,
-          imageUrl,
-        }),
+        body: JSON.stringify(reportData),
       });
 
       if (res.ok) {
         const data = await res.json();
         setSubmittedPriority(data.priority ?? "normal");
+        setQueuedOffline(false);
         setSubmitted(true);
         setFormCategory(null);
         setFormStreet("");
@@ -156,7 +161,21 @@ export function ReportPanel({ lat, lng, open, onClose, onSubmitted, infraContext
         }, 3000);
       }
     } catch {
-      /* silent */
+      // Network failure — queue locally for replay when connectivity returns
+      queueReport(reportData);
+      setQueuedOffline(true);
+      setSubmitted(true);
+      setFormCategory(null);
+      setFormStreet("");
+      setFormDescription("");
+      setImageUrl(null);
+      setFallenPole(false);
+      setPoleHasPower(false);
+      setTimeout(() => {
+        setSubmitted(false);
+        setQueuedOffline(false);
+        onClose();
+      }, 4000);
     } finally {
       setSubmitting(false);
     }
@@ -182,16 +201,28 @@ export function ReportPanel({ lat, lng, open, onClose, onSubmitted, infraContext
 
         {submitted ? (
           <div className="flex flex-col items-center gap-3 py-6 text-center">
-            <div className="rounded-full bg-emerald-500/20 p-3">
-              <ThumbsUp className="h-6 w-6 text-emerald-400" />
+            <div className={`rounded-full p-3 ${queuedOffline ? "bg-amber-500/20" : "bg-emerald-500/20"}`}>
+              {queuedOffline
+                ? <WifiOff className="h-6 w-6 text-amber-400" />
+                : <ThumbsUp className="h-6 w-6 text-emerald-400" />
+              }
             </div>
-            <p className="text-sm font-medium text-emerald-400">Reporte enviado!</p>
-            {submittedPriority && submittedPriority !== "normal" && (
-              <span className={`inline-block rounded-full px-3 py-0.5 text-xs font-bold text-white ${
-                submittedPriority === "urgente" ? "bg-red-500" : "bg-orange-500"
-              }`}>
-                Prioridade: {submittedPriority === "urgente" ? "Urgente" : "Importante"}
-              </span>
+            {queuedOffline ? (
+              <>
+                <p className="text-sm font-medium text-amber-400">Reporte guardado</p>
+                <p className="text-xs text-muted-foreground">Será enviado quando tiveres ligação</p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-medium text-emerald-400">Reporte enviado!</p>
+                {submittedPriority && submittedPriority !== "normal" && (
+                  <span className={`inline-block rounded-full px-3 py-0.5 text-xs font-bold text-white ${
+                    submittedPriority === "urgente" ? "bg-red-500" : "bg-orange-500"
+                  }`}>
+                    Prioridade: {submittedPriority === "urgente" ? "Urgente" : "Importante"}
+                  </span>
+                )}
+              </>
             )}
           </div>
         ) : infraContext ? (
