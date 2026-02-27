@@ -129,6 +129,16 @@ export const transformerCache = pgTable("transformer_cache", {
   fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: serial("id").primaryKey(),
+  endpoint: text("endpoint").notNull().unique(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  lat: real("lat"),
+  lng: real("lng"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const userReports = pgTable("user_reports", {
   id: serial("id").primaryKey(),
   type: text("type").notNull(), // ReportType: electricity | telecom_mobile | telecom_fixed | water | water_leak | roads | roads_tree | roads_damage | other_garbage | other
