@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { db } from "@/db";
 import { userReports } from "@/db/schema";
 import { eq, desc, and, gte, sql } from "drizzle-orm";
 import { classifyPriority } from "@/lib/classify-priority";
 import { resolveParish } from "@/lib/parish-lookup";
 import { detectHotspots } from "@/lib/hotspot-detection";
+import { sendPushToNearby } from "@/lib/push";
 
 export const revalidate = 0;
 
@@ -125,6 +127,22 @@ export async function POST(request: NextRequest) {
         imageUrl: imageUrl ?? null,
       })
       .returning({ id: userReports.id, priority: userReports.priority });
+
+    // Fire push notifications after response is sent (non-blocking)
+    after(async () => {
+      try {
+        await sendPushToNearby({
+          lat,
+          lng,
+          type,
+          description: description ?? null,
+          parish,
+          priority: inserted.priority,
+        });
+      } catch {
+        // push errors must never affect report submission
+      }
+    });
 
     return NextResponse.json({
       success: true,
