@@ -82,3 +82,31 @@ const serwist = new Serwist({
 });
 
 serwist.addEventListeners();
+
+// Push notification received
+self.addEventListener("push", (event) => {
+  const data = event.data?.json() ?? {};
+  const title: string = data.title ?? "Rede Sentinela";
+  const options: NotificationOptions = {
+    body: data.body ?? "Novo alerta na tua área.",
+    icon: data.icon ?? "/icon-192.png",
+    badge: data.badge ?? "/icon-96.png",
+    data: { url: data.url ?? "/map" },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// Notification tapped — open or focus the target URL
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl: string = event.notification.data?.url ?? "/map";
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((windows) => {
+        const existing = windows.find((w) => w.url.includes(targetUrl));
+        if (existing) return existing.focus();
+        return self.clients.openWindow(targetUrl);
+      })
+  );
+});
