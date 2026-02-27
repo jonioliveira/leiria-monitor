@@ -48,3 +48,11 @@ CLAUDE.md
 
 # lock files (keep pnpm only)
 package-lock.json
+
+# Go
+apps/api/bin/
+apps/api/tmp/
+apps/api/sqlc/db/
+apps/api/*.env
+apps/api/.env
+apps/api/.env.local
