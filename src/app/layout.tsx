@@ -30,11 +30,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt">
-      <body className="min-h-screen antialiased">
+      <body className="flex min-h-screen flex-col antialiased">
         <OfflineBanner />
         <InstallPrompt />
         <Nav />
-        <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
           {children}
         </main>
         <footer className="border-t border-border py-6 text-center text-sm text-muted-foreground">
