@@ -12,6 +12,7 @@ import {
   Search, Zap, Wifi, Globe, Droplets, Construction, ThumbsUp, CheckCircle, Map, List, Share2, ChevronRight, Loader2,
 } from "lucide-react";
 import { slugify } from "@/lib/slug-utils";
+import { NotificationPrompt } from "@/components/notification-prompt";
 import type {
   TransformerMarker,
   AntennaFeature,
@@ -723,6 +724,8 @@ function MapaPageInner() {
           </div>
         </div>
       )}
+
+      <NotificationPrompt />
     </div>
   );
 }
