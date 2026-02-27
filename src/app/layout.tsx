@@ -1,8 +1,15 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Nav } from "@/components/nav";
 import { OfflineBanner } from "@/components/offline-banner";
 import { InstallPrompt } from "@/components/install-prompt";
+
+export const viewport: Viewport = {
+  viewportFit: "cover",
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#0c0f1a",
+};
 
 export const metadata: Metadata = {
   title: "Rede Sentinela — Leiria",
@@ -37,7 +44,10 @@ export default function RootLayout({
         <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
           {children}
         </main>
-        <footer className="border-t border-border py-6 text-center text-sm text-muted-foreground">
+        <footer
+          className="border-t border-border pt-6 text-center text-sm text-muted-foreground"
+          style={{ paddingBottom: "calc(1.5rem + env(safe-area-inset-bottom))" }}
+        >
           <div className="mx-auto max-w-7xl px-4">
             <p>
               Dados: E-REDES · IPMA · ANEPC · ANACOM · Copernicus EMS
