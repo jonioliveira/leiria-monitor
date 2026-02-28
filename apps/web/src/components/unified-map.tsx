@@ -32,7 +32,7 @@ export interface MunicipalityData {
 
 export interface Report {
   id: number;
-  type: "electricity" | "telecom_mobile" | "telecom_fixed" | "water" | "roads";
+  type: "electricity" | "telecom_mobile" | "telecom_fixed" | "water" | "water_leak" | "roads" | "roads_tree" | "roads_damage" | "other_garbage" | "other";
   operator: string | null;
   description: string | null;
   street: string | null;

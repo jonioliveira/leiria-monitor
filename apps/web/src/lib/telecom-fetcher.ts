@@ -14,7 +14,7 @@ const MEO_APP_URL =
   "https://app-ef66ba3b-3a54-42d4-9559-560dd50c913d.apps.meo.pt/Pages/Default.aspx?SenderId=346DB3AC0";
 const MEO_SEARCH_API =
   "https://app-ef66ba3b-3a54-42d4-9559-560dd50c913d.apps.meo.pt/Services/Rest.svc/SearchStores";
-const MEO_API_KEY = "177204608089cec963d39972af2b2df0d2fcc130d6";
+const MEO_API_KEY = process.env.MEO_API_KEY ?? "177204608089cec963d39972af2b2df0d2fcc130d6";
 // Bounding box covering the entire Leiria district including coastal Peniche
 const MEO_LEIRIA_BBOX = { latitude1: 39.2, longitude1: -9.5, latitude2: 40.2, longitude2: -8.1 };
 const MEO_AVAILABILITY_URL = "https://www.meo.pt/disponibilidade-servicos-meo";

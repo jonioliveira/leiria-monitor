@@ -12,8 +12,10 @@ const STALE_AFTER_MS = 15 * 60 * 1000; // 15 minutes
 async function refreshCache() {
   try {
     const data = await fetchTelecomData();
-    await db.delete(telecomCache).where(sql`1=1`);
-    await db.insert(telecomCache).values({ data });
+    await db.transaction(async (tx) => {
+      await tx.delete(telecomCache).where(sql`1=1`);
+      await tx.insert(telecomCache).values({ data });
+    });
   } catch {
     // Background refresh failure is silent — cached data keeps being served
   }

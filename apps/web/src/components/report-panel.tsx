@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Zap, Wifi, Globe, Droplets, Construction, X, ThumbsUp, MapPin, Camera, Loader2,
   Smartphone, HelpCircle, TreePine, AlertTriangle, Waves, Trash2, WifiOff,
@@ -86,11 +86,31 @@ export function ReportPanel({ lat, lng, open, onClose, onSubmitted, infraContext
   const [submitted, setSubmitted] = useState(false);
   const [submittedPriority, setSubmittedPriority] = useState<string | null>(null);
   const [queuedOffline, setQueuedOffline] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [recentSubmission, setRecentSubmission] = useState<{ id: number; priority: string; submittedAt: string } | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [fallenPole, setFallenPole] = useState(false);
   const [poleHasPower, setPoleHasPower] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem("lastReport");
+      if (stored) {
+        const parsed = JSON.parse(stored) as { id: number; priority: string; submittedAt: string };
+        const age = Date.now() - new Date(parsed.submittedAt).getTime();
+        if (age < 10 * 60 * 1000) {
+          setRecentSubmission(parsed);
+          sessionStorage.removeItem("lastReport");
+        } else {
+          sessionStorage.removeItem("lastReport");
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const effectiveType = infraContext?.type ?? formType;
   const effectiveOperator = infraContext?.operator ?? (effectiveType.startsWith("telecom") ? formOperator : null);
@@ -135,6 +155,7 @@ export function ReportPanel({ lat, lng, open, onClose, onSubmitted, infraContext
     };
 
     setSubmitting(true);
+    setSubmitError(null);
     try {
       const res = await fetch("/api/reports", {
         method: "POST",
@@ -144,7 +165,8 @@ export function ReportPanel({ lat, lng, open, onClose, onSubmitted, infraContext
 
       if (res.ok) {
         const data = await res.json();
-        setSubmittedPriority(data.priority ?? "normal");
+        const priority = data.priority ?? "normal";
+        setSubmittedPriority(priority);
         setQueuedOffline(false);
         setSubmitted(true);
         setFormCategory(null);
@@ -153,12 +175,24 @@ export function ReportPanel({ lat, lng, open, onClose, onSubmitted, infraContext
         setImageUrl(null);
         setFallenPole(false);
         setPoleHasPower(false);
+        try {
+          sessionStorage.setItem("lastReport", JSON.stringify({
+            id: data.id,
+            priority,
+            submittedAt: new Date().toISOString(),
+          }));
+        } catch {
+          // ignore storage errors
+        }
         onSubmitted();
         setTimeout(() => {
           setSubmitted(false);
           setSubmittedPriority(null);
           onClose();
         }, 3000);
+      } else {
+        // HTTP error (4xx/5xx) — do not queue, show error to user
+        setSubmitError("Falha ao enviar relatório. Tente novamente.");
       }
     } catch {
       // Network failure — queue locally for replay when connectivity returns
@@ -225,43 +259,58 @@ export function ReportPanel({ lat, lng, open, onClose, onSubmitted, infraContext
               </>
             )}
           </div>
-        ) : infraContext ? (
-          <InfraReportForm
-            infraContext={infraContext}
-            formDescription={formDescription}
-            setFormDescription={setFormDescription}
-            fallenPole={fallenPole}
-            setFallenPole={setFallenPole}
-            poleHasPower={poleHasPower}
-            setPoleHasPower={setPoleHasPower}
-            submitting={submitting}
-            onSubmit={handleSubmit}
-            imageUrl={imageUrl}
-            uploading={uploading}
-            fileRef={fileRef}
-            onImageUpload={handleImageUpload}
-          />
         ) : (
-          <ReportForm
-            lat={lat}
-            lng={lng}
-            formCategory={formCategory}
-            setFormCategory={setFormCategory}
-            formType={formType}
-            setFormType={setFormType}
-            formOperator={formOperator}
-            setFormOperator={setFormOperator}
-            formStreet={formStreet}
-            setFormStreet={setFormStreet}
-            formDescription={formDescription}
-            setFormDescription={setFormDescription}
-            submitting={submitting}
-            onSubmit={handleSubmit}
-            imageUrl={imageUrl}
-            uploading={uploading}
-            fileRef={fileRef}
-            onImageUpload={handleImageUpload}
-          />
+          <>
+            {recentSubmission && (
+              <div className="mb-3 flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-400">
+                <ThumbsUp className="h-3.5 w-3.5 shrink-0" />
+                Reporte anterior enviado com sucesso.
+              </div>
+            )}
+            {submitError && (
+              <div className="mb-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+                {submitError}
+              </div>
+            )}
+            {infraContext ? (
+              <InfraReportForm
+                infraContext={infraContext}
+                formDescription={formDescription}
+                setFormDescription={setFormDescription}
+                fallenPole={fallenPole}
+                setFallenPole={setFallenPole}
+                poleHasPower={poleHasPower}
+                setPoleHasPower={setPoleHasPower}
+                submitting={submitting}
+                onSubmit={handleSubmit}
+                imageUrl={imageUrl}
+                uploading={uploading}
+                fileRef={fileRef}
+                onImageUpload={handleImageUpload}
+              />
+            ) : (
+              <ReportForm
+                lat={lat}
+                lng={lng}
+                formCategory={formCategory}
+                setFormCategory={setFormCategory}
+                formType={formType}
+                setFormType={setFormType}
+                formOperator={formOperator}
+                setFormOperator={setFormOperator}
+                formStreet={formStreet}
+                setFormStreet={setFormStreet}
+                formDescription={formDescription}
+                setFormDescription={setFormDescription}
+                submitting={submitting}
+                onSubmit={handleSubmit}
+                imageUrl={imageUrl}
+                uploading={uploading}
+                fileRef={fileRef}
+                onImageUpload={handleImageUpload}
+              />
+            )}
+          </>
         )}
       </div>
 
@@ -298,43 +347,58 @@ export function ReportPanel({ lat, lng, open, onClose, onSubmitted, infraContext
             )}
             <p className="text-xs text-muted-foreground">Obrigado pela contribuição.</p>
           </div>
-        ) : infraContext ? (
-          <InfraReportForm
-            infraContext={infraContext}
-            formDescription={formDescription}
-            setFormDescription={setFormDescription}
-            fallenPole={fallenPole}
-            setFallenPole={setFallenPole}
-            poleHasPower={poleHasPower}
-            setPoleHasPower={setPoleHasPower}
-            submitting={submitting}
-            onSubmit={handleSubmit}
-            imageUrl={imageUrl}
-            uploading={uploading}
-            fileRef={fileRef}
-            onImageUpload={handleImageUpload}
-          />
         ) : (
-          <ReportForm
-            lat={lat}
-            lng={lng}
-            formCategory={formCategory}
-            setFormCategory={setFormCategory}
-            formType={formType}
-            setFormType={setFormType}
-            formOperator={formOperator}
-            setFormOperator={setFormOperator}
-            formStreet={formStreet}
-            setFormStreet={setFormStreet}
-            formDescription={formDescription}
-            setFormDescription={setFormDescription}
-            submitting={submitting}
-            onSubmit={handleSubmit}
-            imageUrl={imageUrl}
-            uploading={uploading}
-            fileRef={fileRef}
-            onImageUpload={handleImageUpload}
-          />
+          <>
+            {recentSubmission && (
+              <div className="mb-3 flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-400">
+                <ThumbsUp className="h-3.5 w-3.5 shrink-0" />
+                Reporte anterior enviado com sucesso.
+              </div>
+            )}
+            {submitError && (
+              <div className="mb-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+                {submitError}
+              </div>
+            )}
+            {infraContext ? (
+              <InfraReportForm
+                infraContext={infraContext}
+                formDescription={formDescription}
+                setFormDescription={setFormDescription}
+                fallenPole={fallenPole}
+                setFallenPole={setFallenPole}
+                poleHasPower={poleHasPower}
+                setPoleHasPower={setPoleHasPower}
+                submitting={submitting}
+                onSubmit={handleSubmit}
+                imageUrl={imageUrl}
+                uploading={uploading}
+                fileRef={fileRef}
+                onImageUpload={handleImageUpload}
+              />
+            ) : (
+              <ReportForm
+                lat={lat}
+                lng={lng}
+                formCategory={formCategory}
+                setFormCategory={setFormCategory}
+                formType={formType}
+                setFormType={setFormType}
+                formOperator={formOperator}
+                setFormOperator={setFormOperator}
+                formStreet={formStreet}
+                setFormStreet={setFormStreet}
+                formDescription={formDescription}
+                setFormDescription={setFormDescription}
+                submitting={submitting}
+                onSubmit={handleSubmit}
+                imageUrl={imageUrl}
+                uploading={uploading}
+                fileRef={fileRef}
+                onImageUpload={handleImageUpload}
+              />
+            )}
+          </>
         )}
       </div>
     </>

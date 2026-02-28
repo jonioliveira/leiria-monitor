@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, Suspense, Component } from "react";
+import type { ErrorInfo, ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -37,6 +38,45 @@ function isStale(r: Report): boolean {
   if (ageMs < 48 * 60 * 60 * 1000) return false;
   if (!r.lastUpvotedAt) return true;
   return now - new Date(r.lastUpvotedAt).getTime() > 24 * 60 * 60 * 1000;
+}
+
+class MapErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(_: Error) {
+    return { hasError: true };
+  }
+
+  override componentDidCatch(_error: Error, _info: ErrorInfo) {
+    // could log to error reporting service here
+  }
+
+  override render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex h-full flex-col items-center justify-center gap-4 text-center px-6">
+          <Map className="h-10 w-10 text-muted-foreground/40" />
+          <div>
+            <p className="text-sm font-medium text-foreground">Não foi possível carregar o mapa</p>
+            <p className="mt-1 text-xs text-muted-foreground">Ocorreu um erro ao inicializar o Leaflet.</p>
+          </div>
+          <button
+            onClick={() => this.setState({ hasError: false })}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 const UnifiedMap = dynamic(
@@ -456,20 +496,22 @@ function MapaPageInner() {
       {/* ── Map view ─────────────────────────────────────── */}
       {view === "map" && (
         <div className="relative flex-1">
-          <UnifiedMap
-            layers={{ transformers, antennas, reports, poles, hotspots }}
-            visibleLayers={visibleLayers}
-            visibleOperators={visibleOperators}
-            onMapClick={handleMapClick}
-            onReportInfra={handleReportInfra}
-            onUpvote={handleUpvote}
-            onResolve={handleResolve}
-            onShare={handleShare}
-            onBoundsChange={handleBoundsChange}
-            clickedPosition={reportLat != null && reportLng != null ? { lat: reportLat, lng: reportLng } : null}
-            userLocation={userLocation}
-            flyTo={flyTo}
-          />
+          <MapErrorBoundary>
+            <UnifiedMap
+              layers={{ transformers, antennas, reports: reports.filter((r) => !isStale(r)), poles, hotspots }}
+              visibleLayers={visibleLayers}
+              visibleOperators={visibleOperators}
+              onMapClick={handleMapClick}
+              onReportInfra={handleReportInfra}
+              onUpvote={handleUpvote}
+              onResolve={handleResolve}
+              onShare={handleShare}
+              onBoundsChange={handleBoundsChange}
+              clickedPosition={reportLat != null && reportLng != null ? { lat: reportLat, lng: reportLng } : null}
+              userLocation={userLocation}
+              flyTo={flyTo}
+            />
+          </MapErrorBoundary>
 
           {/* Zoom gate message for poles layer */}
           {visibleLayers.has("poles") && mapZoom < 14 && (

@@ -11,6 +11,13 @@ export async function GET() {
       db.select().from(ipmaForecasts),
     ]);
 
+    const LEVEL_LABELS: Record<string, string> = {
+      green: "Verde",
+      yellow: "Amarelo",
+      orange: "Laranja",
+      red: "Vermelho",
+    };
+
     return NextResponse.json({
       success: true,
       timestamp: new Date().toISOString(),
@@ -20,6 +27,7 @@ export async function GET() {
         area: w.area,
         type: w.type,
         level: w.level,
+        level_label: LEVEL_LABELS[w.level] ?? w.level,
         level_color: w.levelColor,
         text: w.text,
         start: w.startTime?.toISOString() ?? null,

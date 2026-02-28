@@ -18,6 +18,9 @@ export async function GET() {
       timestamp: new Date().toISOString(),
       source: "E-Redes Open Data Portal",
       source_url: "https://e-redes.opendatasoft.com",
+      national: {
+        total_active_outages: totalOutages,
+      },
       leiria: {
         active_outages: {
           total_outage_count: totalOutages,

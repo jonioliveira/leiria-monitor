@@ -90,7 +90,7 @@ export async function GET() {
     }
 
     let weatherStatus: "critical" | "warning" | "ok" | "unknown" = "unknown";
-    if (warnings.length >= 0) {
+    if (warnings.length > 0) {
       const hasRed = warnings.some((w) => w.level === "red");
       const hasOrange = warnings.some((w) => w.level === "orange");
       weatherStatus = hasRed ? "critical" : hasOrange ? "warning" : "ok";

@@ -70,6 +70,8 @@ export const eredesScheduledWork = pgTable("eredes_scheduled_work", {
   fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// TODO: recoverySnapshots is unused/deprecated. Usage was removed in commit 9092c5e.
+// Keep the table definition to avoid accidental schema drift; drop it in a future migration.
 export const recoverySnapshots = pgTable(
   "recovery_snapshots",
   {

@@ -213,7 +213,12 @@ export default function HomePage() {
                   /{data!.summary.electricity.substationsTotal} subestações ativas
                 </p>
               )}
-              <div className="mt-3 flex items-center text-xs text-primary">
+              {data?.timestamp && (
+                <p className="mt-2 text-[10px] text-muted-foreground/60">
+                  Atualizado às {new Date(data.timestamp).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}
+                </p>
+              )}
+              <div className="mt-2 flex items-center text-xs text-primary">
                 Recuperação <ArrowRight className="ml-1 h-3 w-3" />
               </div>
             </CardContent>
@@ -235,7 +240,12 @@ export default function HomePage() {
             <CardContent>
               <p className="text-2xl font-bold">{data?.summary.weather.activeWarnings ?? "—"}</p>
               <p className="text-xs text-muted-foreground">Avisos ativos</p>
-              <div className="mt-3 flex items-center text-xs text-primary">
+              {data?.timestamp && (
+                <p className="mt-2 text-[10px] text-muted-foreground/60">
+                  Atualizado às {new Date(data.timestamp).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}
+                </p>
+              )}
+              <div className="mt-2 flex items-center text-xs text-primary">
                 Situação <ArrowRight className="ml-1 h-3 w-3" />
               </div>
             </CardContent>
@@ -257,7 +267,12 @@ export default function HomePage() {
             <CardContent>
               <p className="text-2xl font-bold">{data?.summary.occurrences.activeCount ?? "—"}</p>
               <p className="text-xs text-muted-foreground">Ativas</p>
-              <div className="mt-3 flex items-center text-xs text-primary">
+              {data?.timestamp && (
+                <p className="mt-2 text-[10px] text-muted-foreground/60">
+                  Atualizado às {new Date(data.timestamp).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}
+                </p>
+              )}
+              <div className="mt-2 flex items-center text-xs text-primary">
                 Situação <ArrowRight className="ml-1 h-3 w-3" />
               </div>
             </CardContent>
@@ -265,7 +280,7 @@ export default function HomePage() {
         </Link>
 
         {/* Copernicus */}
-        <Link href="/situation">
+        <Link href="/map">
           <Card className="cursor-pointer transition-colors hover:bg-accent/50 h-full overflow-hidden">
             <CardHeader className="flex flex-col gap-1 pb-2 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
               <CardTitle className="flex items-center gap-2 text-sm font-medium">
@@ -281,8 +296,13 @@ export default function HomePage() {
               <p className="text-xs text-muted-foreground">
                 Produtos · {data?.summary.copernicus?.aois ?? 0} AOIs
               </p>
-              <div className="mt-3 flex items-center text-xs text-primary">
-                Situação <ArrowRight className="ml-1 h-3 w-3" />
+              {data?.timestamp && (
+                <p className="mt-2 text-[10px] text-muted-foreground/60">
+                  Atualizado às {new Date(data.timestamp).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}
+                </p>
+              )}
+              <div className="mt-2 flex items-center text-xs text-primary">
+                Mapa <ArrowRight className="ml-1 h-3 w-3" />
               </div>
             </CardContent>
           </Card>

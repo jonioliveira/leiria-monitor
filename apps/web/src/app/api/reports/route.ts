@@ -28,7 +28,8 @@ export async function GET() {
       .orderBy(
         sql`CASE ${userReports.priority} WHEN 'urgente' THEN 0 WHEN 'importante' THEN 1 ELSE 2 END`,
         desc(userReports.createdAt)
-      );
+      )
+      .limit(500);
 
     const mapped = reports.map((r) => ({
       id: r.id,
@@ -64,6 +65,14 @@ export async function GET() {
 
 // POST — submit a new report
 export async function POST(request: NextRequest) {
+  const contentLength = request.headers.get("content-length");
+  if (contentLength && parseInt(contentLength, 10) > 1048576) {
+    return NextResponse.json(
+      { success: false, error: "Payload demasiado grande (máx. 1 MB)" },
+      { status: 413 }
+    );
+  }
+
   try {
     const body = await request.json();
 
