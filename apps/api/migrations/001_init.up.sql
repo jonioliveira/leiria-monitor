@@ -129,16 +129,19 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 
 CREATE TABLE IF NOT EXISTS user_reports (
     id              SERIAL PRIMARY KEY,
-    -- ReportType: electricity|telecom_mobile|telecom_fixed|water|water_leak|roads|roads_tree|roads_damage|other_garbage|other
-    type            TEXT NOT NULL,
+    type            TEXT NOT NULL CHECK (type IN (
+                        'electricity','telecom_mobile','telecom_fixed',
+                        'water','water_leak','roads','roads_tree',
+                        'roads_damage','other_garbage','other'
+                    )),
     operator        TEXT,
     description     TEXT,
     street          TEXT,
     parish          TEXT,
     lat             REAL NOT NULL,
     lng             REAL NOT NULL,
-    -- priority: urgente|importante|normal
-    priority        TEXT NOT NULL DEFAULT 'normal',
+    priority        TEXT NOT NULL DEFAULT 'normal' CHECK (priority IN ('urgente','importante','normal')),
+    power_source    TEXT,
     resolved        BOOLEAN NOT NULL DEFAULT FALSE,
     upvotes         INTEGER NOT NULL DEFAULT 1,
     last_upvoted_at TIMESTAMPTZ,

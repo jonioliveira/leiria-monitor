@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
@@ -40,8 +44,8 @@ func main() {
 		AllowCredentials: false,
 	}))
 
-	// Health check (used by k8s liveness/readiness probes)
-	r.Get("/healthz", handlers.Health)
+	// Health check (used by k8s liveness/readiness probes — also pings DB)
+	r.Get("/healthz", handlers.Health(pool))
 
 	// ── Public API ────────────────────────────────────────────
 	r.Route("/api", func(r chi.Router) {
@@ -97,9 +101,31 @@ func main() {
 	})
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
-	slog.Info("leiria-monitor API starting", "addr", addr)
-	if err := http.ListenAndServe(addr, r); err != nil {
-		slog.Error("server error", "err", err)
+	server := &http.Server{
+		Addr:    addr,
+		Handler: r,
+	}
+
+	// Graceful shutdown on SIGTERM / SIGINT (Kubernetes sends SIGTERM on eviction)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
+
+	go func() {
+		slog.Info("leiria-monitor API starting", "addr", addr)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("server error", "err", err)
+			os.Exit(1)
+		}
+	}()
+
+	<-ctx.Done()
+	slog.Info("shutting down server gracefully")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		slog.Error("server shutdown error", "err", err)
 		os.Exit(1)
 	}
+	slog.Info("server stopped")
 }

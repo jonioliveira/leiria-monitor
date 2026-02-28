@@ -18,7 +18,7 @@ type Config struct {
 func Load() *Config {
 	return &Config{
 		DatabaseURL:  mustEnv("DATABASE_URL"),
-		CronSecret:   getEnv("CRON_SECRET", "dev-secret-token"),
+		CronSecret:   mustEnv("CRON_SECRET"),
 		Port:         getEnv("PORT", "8080"),
 		CORSOrigins:  []string{getEnv("CORS_ORIGIN", "http://localhost:3000")},
 		VAPIDPublic:  getEnv("VAPID_PUBLIC_KEY", ""),
