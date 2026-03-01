@@ -50,12 +50,10 @@ func main() {
 	// ── Public API ────────────────────────────────────────────
 	r.Route("/api", func(r chi.Router) {
 		// Reports
-		r.Get("/reports", handlers.NotImplemented)
-		r.Post("/reports", handlers.NotImplemented)
-		r.Patch("/reports", handlers.NotImplemented)
+		r.Handle("/reports", handlers.Reports(pool, cfg))
 
 		// Dashboard
-		r.Get("/dashboard", handlers.NotImplemented)
+		r.Get("/dashboard", handlers.Dashboard(pool))
 		r.Get("/dashboard/area", handlers.NotImplemented)
 
 		// Weather
@@ -68,7 +66,7 @@ func main() {
 		r.Get("/electricity/poles", handlers.Poles(pool))
 
 		// Telecom
-		r.Get("/telecom", handlers.NotImplemented)
+		r.Get("/telecom", handlers.Telecom(pool, cfg))
 
 		// Antennas
 		r.Get("/antennas", handlers.Antennas(pool))

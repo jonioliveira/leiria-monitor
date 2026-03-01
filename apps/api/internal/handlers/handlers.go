@@ -37,6 +37,22 @@ func nullString(v *string) sql.NullString {
 	return sql.NullString{String: *v, Valid: true}
 }
 
+// nullText converts a *string to pgtype.Text for sqlc nullable text columns.
+func nullText(v *string) pgtype.Text {
+	if v == nil {
+		return pgtype.Text{Valid: false}
+	}
+	return pgtype.Text{String: *v, Valid: true}
+}
+
+// stringPtr returns nil for empty string, otherwise a pointer to s.
+func stringPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
 // respond writes a JSON response with the given status code.
 func respond(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
