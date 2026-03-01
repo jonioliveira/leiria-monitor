@@ -1,11 +1,41 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// envelope is the standard error/not-implemented response shape.
+type envelope struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
+}
+
+// now returns the current UTC time as an ISO-8601 string.
+func now() string {
+	return time.Now().UTC().Format(time.RFC3339)
+}
+
+// nullFloat64 converts a *float64 to pgtype.Float4 for sqlc nullable columns.
+func nullFloat64(v *float64) pgtype.Float4 {
+	if v == nil {
+		return pgtype.Float4{Valid: false}
+	}
+	return pgtype.Float4{Float32: float32(*v), Valid: true}
+}
+
+// nullString converts a *string to sql.NullString.
+func nullString(v *string) sql.NullString {
+	if v == nil {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: *v, Valid: true}
+}
 
 // respond writes a JSON response with the given status code.
 func respond(w http.ResponseWriter, status int, v any) {

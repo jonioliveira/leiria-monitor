@@ -59,29 +59,28 @@ func main() {
 		r.Get("/dashboard/area", handlers.NotImplemented)
 
 		// Weather
-		r.Get("/weather", handlers.NotImplemented)
+		r.Get("/weather", handlers.Weather(pool))
 
 		// Electricity
-		r.Get("/electricity", handlers.NotImplemented)
-		r.Get("/electricity/substations", handlers.NotImplemented)
-		r.Get("/electricity/transformers", handlers.NotImplemented)
-		r.Get("/electricity/poles", handlers.NotImplemented)
+		r.Get("/electricity", handlers.Electricity(pool))
+		r.Get("/electricity/substations", handlers.Substations(pool))
+		r.Get("/electricity/transformers", handlers.Transformers(pool))
+		r.Get("/electricity/poles", handlers.Poles(pool))
 
 		// Telecom
 		r.Get("/telecom", handlers.NotImplemented)
 
 		// Antennas
-		r.Get("/antennas", handlers.NotImplemented)
+		r.Get("/antennas", handlers.Antennas(pool))
 
 		// Occurrences / ProCiv
-		r.Get("/occurrences", handlers.NotImplemented)
+		r.Get("/occurrences", handlers.Occurrences(pool))
 
 		// Copernicus
 		r.Get("/copernicus", handlers.NotImplemented)
 
 		// Push notifications
-		r.Post("/push/subscribe", handlers.NotImplemented)
-		r.Delete("/push/subscribe", handlers.NotImplemented)
+		r.Handle("/push/subscribe", handlers.PushSubscribe(pool))
 
 		// ── Cron handlers (protected by CRON_SECRET) ──────────
 		r.Route("/cron", func(r chi.Router) {
