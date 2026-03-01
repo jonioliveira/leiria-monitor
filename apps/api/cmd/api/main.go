@@ -75,7 +75,13 @@ func main() {
 		r.Get("/occurrences", handlers.Occurrences(pool))
 
 		// Copernicus
-		r.Get("/copernicus", handlers.NotImplemented)
+		r.Get("/copernicus", handlers.Copernicus())
+
+		// Water
+		r.Get("/water", handlers.Water())
+
+		// Recovery
+		r.Get("/recovery", handlers.Recovery())
 
 		// Push notifications
 		r.Handle("/push/subscribe", handlers.PushSubscribe(pool))
