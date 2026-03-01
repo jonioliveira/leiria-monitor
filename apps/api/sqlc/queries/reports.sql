@@ -8,7 +8,7 @@ ORDER BY
     created_at DESC;
 
 -- name: InsertReport :one
-INSERT INTO user_reports (type, operator, description, street, parish, lat, lng, priority, last_upvoted_at, image_url)
+INSERT INTO user_reports (type, operator, description, street, parish, lat, lng, priority, power_source, image_url)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING id, priority;
 
@@ -25,3 +25,16 @@ WHERE id = $1;
 
 -- name: GetReportByID :one
 SELECT * FROM user_reports WHERE id = $1;
+
+-- name: CountActiveReportsByType :one
+SELECT COUNT(*)::int AS count
+FROM user_reports
+WHERE resolved = FALSE
+  AND created_at >= NOW() - INTERVAL '7 days'
+  AND type = $1;
+
+-- name: CountActiveReports :one
+SELECT COUNT(*)::int AS count
+FROM user_reports
+WHERE resolved = FALSE
+  AND created_at >= NOW() - INTERVAL '7 days';

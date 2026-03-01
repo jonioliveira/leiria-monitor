@@ -6,24 +6,30 @@ import (
 )
 
 type Config struct {
-	DatabaseURL string
-	CronSecret  string
-	Port        string
-	CORSOrigins []string
-	VAPIDPublic string
-	VAPIDPrivate string
-	VAPIDSubject string
+	DatabaseURL      string
+	CronSecret       string
+	Port             string
+	CORSOrigins      []string
+	VAPIDPublic      string
+	VAPIDPrivate     string
+	VAPIDSubject     string
+	AnthropicAPIKey  string
+	MeoAPIKey        string
+	FeatureAIPriority bool
 }
 
 func Load() *Config {
 	return &Config{
-		DatabaseURL:  mustEnv("DATABASE_URL"),
-		CronSecret:   mustEnv("CRON_SECRET"),
-		Port:         getEnv("PORT", "8080"),
-		CORSOrigins:  []string{getEnv("CORS_ORIGIN", "http://localhost:3000")},
-		VAPIDPublic:  getEnv("VAPID_PUBLIC_KEY", ""),
-		VAPIDPrivate: getEnv("VAPID_PRIVATE_KEY", ""),
-		VAPIDSubject: getEnv("VAPID_SUBJECT", ""),
+		DatabaseURL:       mustEnv("DATABASE_URL"),
+		CronSecret:        mustEnv("CRON_SECRET"),
+		Port:              getEnv("PORT", "8080"),
+		CORSOrigins:       []string{getEnv("CORS_ORIGIN", "http://localhost:3000")},
+		VAPIDPublic:       getEnv("VAPID_PUBLIC_KEY", ""),
+		VAPIDPrivate:      getEnv("VAPID_PRIVATE_KEY", ""),
+		VAPIDSubject:      getEnv("VAPID_SUBJECT", ""),
+		AnthropicAPIKey:   getEnv("ANTHROPIC_API_KEY", ""),
+		MeoAPIKey:         getEnv("MEO_API_KEY", "177204608089cec963d39972af2b2df0d2fcc130d6"),
+		FeatureAIPriority: getEnv("FEATURE_AI_PRIORITY", "") == "true",
 	}
 }
 
