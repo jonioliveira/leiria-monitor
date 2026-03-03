@@ -1,0 +1,6 @@
+bin/
+tmp/
+*.env
+.env
+.env.local
+sqlc/db/

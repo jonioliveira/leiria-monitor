@@ -1,0 +1,78 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/jonioliveira/leiria-monitor-api
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: true
+  className: "traefik"
+  annotations: {}
+  hosts:
+    - host: api.redesentinela.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: leiria-monitor-api-tls
+      hosts:
+        - api.redesentinela.com
+
+resources:
+  limits:
+    cpu: 250m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+
+env:
+  PORT: "8080"
+  # DATABASE_URL, CRON_SECRET, VAPID_* loaded from k8s secret
+
+envFrom:
+  - secretRef:
+      name: leiria-monitor-api-secrets
+
+cronjobs:
+  enabled: true
+  ingestAll:
+    schedule: "0 0 * * *"
+    endpoint: "/api/cron/ingest-all"
+  telecom:
+    schedule: "*/15 * * * *"
+    endpoint: "/api/cron/telecom"
+  substations:
+    schedule: "0 */6 * * *"
+    endpoint: "/api/cron/substations"
+  transformers:
+    schedule: "0 3 * * *"
+    endpoint: "/api/cron/transformers"
+  snapshot:
+    schedule: "0 1 * * *"
+    endpoint: "/api/cron/snapshot"
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  initialDelaySeconds: 3
+  periodSeconds: 5
