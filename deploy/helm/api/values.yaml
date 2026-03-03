@@ -46,7 +46,7 @@ envFrom:
       name: leiria-monitor-api-secrets
 
 cronjobs:
-  enabled: false
+  enabled: true
   ingestAll:
     schedule: "0 0 * * *"
     endpoint: "/api/cron/ingest-all"
