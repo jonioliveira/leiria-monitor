@@ -43,8 +43,5 @@ next-env.d.ts
 *.swp
 *.swo
 
-# Claude Code
-CLAUDE.md
-
 # lock files (keep pnpm only)
 package-lock.json
