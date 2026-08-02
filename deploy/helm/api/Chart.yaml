@@ -1,0 +1,6 @@
+apiVersion: v2
+name: leiria-monitor-api
+description: Rede Sentinela Go API — Leiria district infrastructure monitoring
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

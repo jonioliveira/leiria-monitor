@@ -1,0 +1,15 @@
+DROP TABLE IF EXISTS user_reports;
+DROP TABLE IF EXISTS push_subscriptions;
+DROP TABLE IF EXISTS transformer_cache;
+DROP TABLE IF EXISTS substation_cache;
+DROP TABLE IF EXISTS telecom_cache;
+DROP TABLE IF EXISTS bt_poles;
+DROP TABLE IF EXISTS antennas;
+DROP TABLE IF EXISTS prociv_warnings;
+DROP INDEX IF EXISTS recovery_snapshots_date_idx;
+DROP TABLE IF EXISTS recovery_snapshots;
+DROP TABLE IF EXISTS eredes_scheduled_work;
+DROP TABLE IF EXISTS eredes_outages;
+DROP TABLE IF EXISTS prociv_occurrences;
+DROP TABLE IF EXISTS ipma_forecasts;
+DROP TABLE IF EXISTS ipma_warnings;

@@ -1,0 +1,32 @@
+{{- if .Values.cronjobs.enabled }}
+{{- $root := . }}
+{{- range $name, $cron := .Values.cronjobs }}
+{{- if ne $name "enabled" }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $root.Release.Name }}-{{ $name }}
+spec:
+  schedule: {{ $cron.schedule | quote }}
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: cron
+              image: curlimages/curl:latest
+              command:
+                - sh
+                - -c
+                - |
+                  curl -sf -X POST \
+                    -H "Authorization: Bearer ${CRON_SECRET}" \
+                    http://{{ $root.Release.Name }}:{{ $root.Values.service.port }}{{ $cron.endpoint }}
+              envFrom:
+                {{- toYaml $root.Values.envFrom | nindent 16 }}
+{{- end }}
+{{- end }}
+{{- end }}
