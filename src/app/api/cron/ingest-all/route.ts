@@ -40,6 +40,19 @@ export async function GET(request: NextRequest) {
 
     let warningsIngested = 0;
     let forecastsIngested = 0;
+    const ipmaErrors: string[] = [];
+
+    if (warningsRes.status === "rejected") {
+      ipmaErrors.push(`warnings: ${warningsRes.reason}`);
+    } else if (!warningsRes.value.ok) {
+      ipmaErrors.push(`warnings: HTTP ${warningsRes.value.status}`);
+    }
+
+    if (forecastRes.status === "rejected") {
+      ipmaErrors.push(`forecast: ${forecastRes.reason}`);
+    } else if (!forecastRes.value.ok) {
+      ipmaErrors.push(`forecast: HTTP ${forecastRes.value.status}`);
+    }
 
     if (warningsRes.status === "fulfilled" && warningsRes.value.ok) {
       const allWarnings = await warningsRes.value.json();
@@ -83,7 +96,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    results.ipma = { success: true, detail: { warnings: warningsIngested, forecasts: forecastsIngested } };
+    results.ipma = {
+      success: ipmaErrors.length === 0,
+      error: ipmaErrors.length > 0 ? ipmaErrors.join("; ") : undefined,
+      detail: { warnings: warningsIngested, forecasts: forecastsIngested },
+    };
   } catch (error: any) {
     results.ipma = { success: false, error: error.message };
   }
@@ -117,7 +134,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    results.eredes = { success: true, detail: { scheduled: scheduledIngested } };
+    results.eredes = res.ok
+      ? { success: true, detail: { scheduled: scheduledIngested } }
+      : {
+          success: false,
+          error: `HTTP ${res.status} from ${EREDES_SCHEDULED_DATASET} — the dataset's field names change; verify the 'where' clause`,
+        };
   } catch (error: any) {
     results.eredes = { success: false, error: error.message };
   }
@@ -194,7 +216,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    results.prociv = { success: true, detail: { ingested } };
+    results.prociv = res.ok
+      ? { success: true, detail: { ingested } }
+      : { success: false, error: `HTTP ${res.status} from ${OCORRENCIAS360_API}` };
   } catch (error: any) {
     results.prociv = { success: false, error: error.message };
   }
@@ -240,18 +264,33 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      await db.delete(procivWarnings);
-      for (const w of scraped) {
-        await db.insert(procivWarnings).values({
-          title: w.title,
-          summary: w.summary,
-          detailUrl: w.detailUrl ? `https://www.prociv.gov.pt${w.detailUrl}` : null,
-          fetchedAt: new Date(),
-        });
+      // Only replace the existing rows once we actually parsed something.
+      // The delete used to run unconditionally, so every night that the site
+      // changed its markup the table was emptied and never refilled.
+      if (scraped.length > 0) {
+        await db.delete(procivWarnings);
+        for (const w of scraped) {
+          await db.insert(procivWarnings).values({
+            title: w.title,
+            summary: w.summary,
+            detailUrl: w.detailUrl ? `https://www.prociv.gov.pt${w.detailUrl}` : null,
+            fetchedAt: new Date(),
+          });
+        }
       }
     }
 
-    results.procivWarnings = { success: true, detail: { ingested: scraped.length } };
+    if (!res.ok) {
+      results.procivWarnings = { success: false, error: `HTTP ${res.status}` };
+    } else if (scraped.length === 0) {
+      results.procivWarnings = {
+        success: false,
+        error:
+          "fetched OK but parsed 0 warnings — either there are genuinely none active, or the page markup changed and the scrape patterns need updating",
+      };
+    } else {
+      results.procivWarnings = { success: true, detail: { ingested: scraped.length } };
+    }
   } catch (error: any) {
     results.procivWarnings = { success: false, error: error.message };
   }
@@ -328,24 +367,53 @@ export async function GET(request: NextRequest) {
       owner: g.owner, type: g.type, technologies: Array.from(g.technologies),
     }));
 
-    await db.delete(antennas).where(sql`1=1`);
+    const failedOperators = geoResults.filter((r) => r.status === "rejected").length;
+
+    // Only wipe the table when there is replacement data — an upstream outage
+    // would otherwise leave the map with no antennas at all until the next run.
     if (rows.length > 0) {
+      await db.delete(antennas).where(sql`1=1`);
       const BATCH = 500;
       for (let i = 0; i < rows.length; i += BATCH) {
         await db.insert(antennas).values(rows.slice(i, i + BATCH));
       }
     }
 
-    results.antennas = { success: true, detail: { ingested: rows.length } };
+    results.antennas =
+      rows.length === 0
+        ? {
+            success: false,
+            error: `no antenna features fetched (${failedOperators}/${OPERATOR_FILES.length} operator sources failed)`,
+          }
+        : { success: true, detail: { ingested: rows.length, failedOperators } };
   } catch (error: any) {
     results.antennas = { success: false, error: error.message };
   }
 
-  return NextResponse.json({
-    success: true,
-    results,
-    timestamp: new Date().toISOString(),
-  });
+  const failedSteps = Object.entries(results)
+    .filter(([, r]) => !r.success)
+    .map(([step]) => step);
+
+  if (failedSteps.length > 0) {
+    // Log and return non-2xx so the failure is visible in the Vercel cron
+    // dashboard and in runtime error tracking. Every step used to report
+    // success even when the upstream returned 404/400, so stale data looked
+    // identical to healthy data from the outside.
+    console.error(
+      `[cron/ingest-all] ${failedSteps.length}/${Object.keys(results).length} steps failed: ${failedSteps.join(", ")}`,
+      JSON.stringify(results)
+    );
+  }
+
+  return NextResponse.json(
+    {
+      success: failedSteps.length === 0,
+      failedSteps,
+      results,
+      timestamp: new Date().toISOString(),
+    },
+    { status: failedSteps.length > 0 ? 500 : 200 }
+  );
 }
 
 function decodeHtmlEntities(text: string): string {
