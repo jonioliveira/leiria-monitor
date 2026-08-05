@@ -3,11 +3,34 @@ import { db } from "@/db";
 import { pushSubscriptions } from "@/db/schema";
 import { sql } from "drizzle-orm";
 
-webpush.setVapidDetails(
-  process.env.VAPID_SUBJECT!,
-  process.env.VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-);
+// VAPID details are configured lazily on first send rather than at module
+// scope. `next build` evaluates this module while collecting page data for
+// /api/reports, where the secrets are not available — configuring eagerly
+// turned a missing env var into a hard build failure.
+let vapidReady: boolean | null = null;
+
+function configureVapid(): boolean {
+  if (vapidReady !== null) return vapidReady;
+
+  const subject = process.env.VAPID_SUBJECT;
+  const publicKey = process.env.VAPID_PUBLIC_KEY;
+  const privateKey = process.env.VAPID_PRIVATE_KEY;
+
+  if (!subject || !publicKey || !privateKey) {
+    vapidReady = false;
+    return false;
+  }
+
+  try {
+    webpush.setVapidDetails(subject, publicKey, privateKey);
+    vapidReady = true;
+  } catch {
+    // Malformed subject or keys — treat as unconfigured rather than throwing
+    vapidReady = false;
+  }
+
+  return vapidReady;
+}
 
 const RADIUS_KM = 15;
 
@@ -59,6 +82,14 @@ export async function sendPushToNearby(report: {
 }): Promise<void> {
   // Only notify for urgent reports
   if (report.priority !== "urgente") return;
+
+  if (!configureVapid()) {
+    console.warn(
+      "[push] VAPID keys not configured — skipping push delivery. " +
+        "Set VAPID_SUBJECT, VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY to enable."
+    );
+    return;
+  }
 
   // Fetch all subscriptions that have coordinates within RADIUS_KM
   // We filter in JS to avoid PostGIS dependency
