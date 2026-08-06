@@ -107,27 +107,38 @@ export async function GET(request: NextRequest) {
 
   // 2) E-REDES — scheduled work
   try {
-    const res = await fetch(
-      `${EREDES_BASE}/catalog/datasets/${EREDES_SCHEDULED_DATASET}/records?limit=50&where=postalcode LIKE '24%'`,
-      { cache: "no-store" }
+    // Filter by municipality rather than postal prefix. Leiria district spans
+    // 24xx, 25xx and 31xx/32xx codes, so `zipcode LIKE '24%'` silently skipped
+    // Pombal, Ansião, Alvaiázere, Caldas da Rainha and Peniche.
+    const inClause = LEIRIA_MUNICIPALITIES.map((m) => `'${m}'`).join(",");
+    const url = new URL(
+      `${EREDES_BASE}/catalog/datasets/${EREDES_SCHEDULED_DATASET}/records`
     );
+    url.searchParams.set("limit", "100");
+    url.searchParams.set("where", `municipality IN (${inClause})`);
+
+    const res = await fetch(url.toString(), { cache: "no-store" });
 
     let scheduledIngested = 0;
 
     if (res.ok) {
       const data = await res.json();
       const records = data.results ?? [];
+      // A successful fetch returning nothing is legitimate here — it means no
+      // work is currently scheduled — so the table is replaced either way.
       await db.delete(eredesScheduledWork).where(sql`1=1`);
       if (records.length > 0) {
         await db.insert(eredesScheduledWork).values(
           records.map((r: any) => ({
-            postalCode: r.postalcode ?? null,
-            locality: r.locality ?? r.localidade ?? null,
-            district: r.distrito ?? r.district ?? null,
-            municipality: r.municipio ?? r.municipality ?? null,
-            startTime: r.startdate ?? r.data_inicio ?? null,
-            endTime: r.enddate ?? r.data_fim ?? null,
-            reason: r.reason ?? r.motivo ?? null,
+            postalCode: r.zipcode ?? null,
+            locality: r.parish ?? null,
+            district: "Leiria",
+            municipality: r.municipality ?? null,
+            startTime: r.startdatetime ?? null,
+            endTime: r.enddatetime ?? null,
+            // The dataset no longer carries a free-text motive; the only
+            // signal left is the scheduled-interruption flag.
+            reason: r.interrupcao_programada === 1 ? "Interrupção programada" : null,
           }))
         );
         scheduledIngested = records.length;
@@ -227,7 +238,9 @@ export async function GET(request: NextRequest) {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
-    const res = await fetch("https://www.prociv.gov.pt/pt/home/avisos-a-populacao/", {
+    // The old /pt/home/avisos-a-populacao/ path now 301s to the homepage;
+    // the warnings live here.
+    const res = await fetch("https://prociv.gov.pt/pt/avisos-a-populacao/", {
       signal: controller.signal,
       cache: "no-store",
       headers: {
@@ -239,41 +252,47 @@ export async function GET(request: NextRequest) {
     clearTimeout(timeout);
 
     const scraped: { title: string; summary: string; detailUrl: string | null }[] = [];
+    let cardsFound = 0;
 
     if (res.ok) {
       const html = await res.text();
 
-      const modalRegex =
-        /<p\s+class="titulo">(.*?)<\/p>\s*<p\s+class="titulo-informativo">.*?<\/p>\s*<p\s+class="resumo">(.*?)<\/p>[\s\S]*?<a[^>]+href="([^"]*)"[^>]*>Saiba mais<\/a>/g;
-      let match;
-      while ((match = modalRegex.exec(html)) !== null) {
-        const title = decodeHtmlEntities(match[1].trim());
-        const summary = decodeHtmlEntities(match[2].trim());
-        const detailUrl = match[3] || null;
-        if (title && summary) scraped.push({ title, summary, detailUrl });
-      }
+      // Each warning is a `box-avisos` card. Splitting on the opening div
+      // isolates one card per chunk, so the first match of each field within
+      // a chunk belongs to that card.
+      const cards = html.split('<div class="box-avisos">').slice(1);
+      cardsFound = cards.length;
 
-      if (scraped.length === 0) {
-        const bannerRegex =
-          /<p\s+class="titulo-emergencia">(.*?)<\/p>[\s\S]*?<a[^>]+class="button-alerta"[^>]+href="([^"]*)"[^>]*>/g;
-        while ((match = bannerRegex.exec(html)) !== null) {
-          const rawTitle = decodeHtmlEntities(match[1].trim());
-          if (rawTitle && !rawTitle.includes("&nbsp;")) {
-            scraped.push({ title: rawTitle, summary: rawTitle, detailUrl: match[2] || null });
-          }
+      for (const card of cards) {
+        // "Ativo" = currently in force, "Arquivo" = historical. Only the
+        // former should ever be surfaced as a live warning.
+        const tipo = /<div class="Tipo">([^<]*)<\/div>/.exec(card)?.[1] ?? "";
+        if (!/ativo/i.test(tipo)) continue;
+
+        const title = cleanText(
+          /<p class="h3-style[^"]*">([\s\S]*?)<\/p>/.exec(card)?.[1] ?? ""
+        );
+        const summary = cleanText(
+          /<div class="card-noticias-ellipsis-noimage">([\s\S]*?)<\/div>/.exec(card)?.[1] ?? ""
+        );
+        const href = /window\.location\.href='([^']+)'/.exec(card)?.[1] ?? null;
+
+        if (title && summary) {
+          scraped.push({ title, summary, detailUrl: href });
         }
       }
 
-      // Only replace the existing rows once we actually parsed something.
-      // The delete used to run unconditionally, so every night that the site
-      // changed its markup the table was emptied and never refilled.
-      if (scraped.length > 0) {
+      // Replace the table whenever the parse succeeded — including when there
+      // are zero active warnings, which legitimately clears stale rows. Only
+      // skip when no cards matched at all, which means the markup changed and
+      // an unconditional delete would empty the table for good.
+      if (cardsFound > 0) {
         await db.delete(procivWarnings);
         for (const w of scraped) {
           await db.insert(procivWarnings).values({
             title: w.title,
             summary: w.summary,
-            detailUrl: w.detailUrl ? `https://www.prociv.gov.pt${w.detailUrl}` : null,
+            detailUrl: w.detailUrl ? `https://prociv.gov.pt${w.detailUrl}` : null,
             fetchedAt: new Date(),
           });
         }
@@ -282,14 +301,17 @@ export async function GET(request: NextRequest) {
 
     if (!res.ok) {
       results.procivWarnings = { success: false, error: `HTTP ${res.status}` };
-    } else if (scraped.length === 0) {
+    } else if (cardsFound === 0) {
       results.procivWarnings = {
         success: false,
         error:
-          "fetched OK but parsed 0 warnings — either there are genuinely none active, or the page markup changed and the scrape patterns need updating",
+          "fetched OK but found no 'box-avisos' cards — the page markup changed and the scrape patterns need updating",
       };
     } else {
-      results.procivWarnings = { success: true, detail: { ingested: scraped.length } };
+      results.procivWarnings = {
+        success: true,
+        detail: { active: scraped.length, cardsSeen: cardsFound },
+      };
     }
   } catch (error: any) {
     results.procivWarnings = { success: false, error: error.message };
@@ -418,21 +440,23 @@ export async function GET(request: NextRequest) {
 
 function decodeHtmlEntities(text: string): string {
   return text
-    .replace(/&#xE0;/g, "à")
-    .replace(/&#xE7;/g, "ç")
-    .replace(/&#xE3;/g, "ã")
-    .replace(/&#xE9;/g, "é")
-    .replace(/&#xEA;/g, "ê")
-    .replace(/&#xED;/g, "í")
-    .replace(/&#xF3;/g, "ó")
-    .replace(/&#xF4;/g, "ô")
-    .replace(/&#xFA;/g, "ú")
-    .replace(/&#xA;/g, "\n")
+    // Decode numeric entities generically. The previous hand-written list
+    // covered nine accented characters and silently left the rest — á, õ, â
+    // and others on the ProCiv pages — as raw "&#xE1;" in the stored text.
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) =>
+      String.fromCodePoint(parseInt(hex, 16))
+    )
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
     .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
-    .replace(/&#x27;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&")
     .trim();
+}
+
+/** Strip tags, decode entities and collapse whitespace from scraped HTML. */
+function cleanText(html: string): string {
+  return decodeHtmlEntities(html.replace(/<[^>]*>/g, "")).replace(/\s+/g, " ").trim();
 }
