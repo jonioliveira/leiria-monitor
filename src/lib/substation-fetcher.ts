@@ -1,5 +1,8 @@
 import { EREDES_BASE, EREDES_SUBSTATION_DATASET } from "@/lib/constants";
 
+// The E-REDES API rejects offsets beyond this.
+const MAX_OFFSET = 10_000;
+
 // Fetch all pages in parallel batches of 10
 async function fetchAllPages(
   baseUrl: URL,
@@ -12,29 +15,61 @@ async function fetchAllPages(
   });
   if (!res.ok) throw new Error(`E-REDES API responded with ${res.status}`);
   const json = await res.json();
-  const total = json.total_count ?? 0;
   const allResults = [...(json.results ?? [])];
 
-  const offsets: number[] = [];
-  for (let o = pageSize; o < Math.min(total, 10000); o += pageSize) {
-    offsets.push(o);
-  }
+  // `total_count` cannot drive pagination here: on aggregated (group_by)
+  // queries the E-REDES API caps it at the page size, so it reports 100 for a
+  // 2500-bucket result. Trusting it generated zero offsets, and since the
+  // query is ordered ascending from 2026-01-20 the charts silently showed only
+  // the OLDEST 100 buckets — a four-day window frozen in January.
+  // Page until a batch comes back short instead.
+  if (allResults.length < pageSize) return allResults;
 
-  for (let i = 0; i < offsets.length; i += 10) {
-    const batch = offsets.slice(i, i + 10);
-    const results = await Promise.allSettled(
-      batch.map((offset) => {
+  const BATCH = 10;
+  let offset = pageSize;
+
+  while (offset < MAX_OFFSET) {
+    const batch: number[] = [];
+    for (let i = 0; i < BATCH; i++) {
+      const o = offset + i * pageSize;
+      if (o >= MAX_OFFSET) break;
+      batch.push(o);
+    }
+    if (batch.length === 0) break;
+
+    const settled = await Promise.allSettled(
+      batch.map((o) => {
         const pageUrl = new URL(baseUrl.toString());
-        pageUrl.searchParams.set("offset", String(offset));
+        pageUrl.searchParams.set("offset", String(o));
         return fetch(pageUrl.toString(), { signal, next: { revalidate: 300 } });
       })
     );
-    for (const r of results) {
+
+    let failures = 0;
+    let sawShortPage = false;
+    let added = 0;
+
+    for (const r of settled) {
       if (r.status === "fulfilled" && r.value.ok) {
         const pageJson = await r.value.json();
-        allResults.push(...(pageJson.results ?? []));
+        const rows = pageJson.results ?? [];
+        allResults.push(...rows);
+        added += rows.length;
+        if (rows.length < pageSize) sawShortPage = true;
+      } else {
+        failures++;
       }
     }
+
+    if (failures > 0) {
+      console.warn(
+        `[substation-fetcher] ${failures}/${batch.length} page requests failed at offset ${offset} — series may be incomplete`
+      );
+    }
+
+    // A short page means the result set is exhausted.
+    if (sawShortPage || added === 0) break;
+    offset += batch.length * pageSize;
   }
 
   return allResults;
