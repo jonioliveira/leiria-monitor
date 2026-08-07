@@ -6,9 +6,24 @@ import { getParishesByConcelho } from "@/lib/parish-lookup";
 import {
   EREDES_BASE,
   EREDES_PTD_DATASET,
+  MUNICIPALITY_COORDS,
 } from "@/lib/constants";
 
 export const revalidate = 60;
+
+/**
+ * E-REDES matches `con_name` case-sensitively against the properly-cased
+ * municipality name ('Leiria' returns 1020 rows, 'LEIRIA' returns 0), while
+ * callers may send any casing. Resolve to the canonical spelling — which also
+ * keeps the caller-supplied value out of the ODSQL string.
+ */
+function canonicalMunicipality(name: string): string | null {
+  const target = name.toUpperCase();
+  return (
+    Object.keys(MUNICIPALITY_COORDS).find((m) => m.toUpperCase() === target) ??
+    null
+  );
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -78,16 +93,17 @@ export async function GET(request: NextRequest) {
 
     // Fetch transformer data for this concelho (concelho-level only)
     let transformers: { total: number; avgUsage: string | null } = { total: 0, avgUsage: null };
-    if (!parish) {
+    const canonical = canonicalMunicipality(concelho);
+    if (!parish && canonical) {
       try {
         const url = new URL(
           `${EREDES_BASE}/catalog/datasets/${EREDES_PTD_DATASET}/records`
         );
         url.searchParams.set("limit", "0");
-        url.searchParams.set(
-          "where",
-          `municipio='${concelho.toUpperCase()}'`
-        );
+        // The dataset has no `municipio` field — that query returned
+        // "Unknown field: municipio" and the error was swallowed below, so
+        // every council page reported 0 transformers.
+        url.searchParams.set("where", `con_name='${canonical}'`);
         const res = await fetch(url.toString(), {
           signal: AbortSignal.timeout(5000),
           next: { revalidate: 300 },
@@ -98,9 +114,16 @@ export async function GET(request: NextRequest) {
             total: json.total_count ?? 0,
             avgUsage: null,
           };
+        } else {
+          console.warn(
+            `[dashboard/area] transformer count failed: HTTP ${res.status} for con_name='${canonical}'`
+          );
         }
-      } catch {
-        // Non-critical
+      } catch (error) {
+        console.warn(
+          `[dashboard/area] transformer count threw for con_name='${canonical}':`,
+          error
+        );
       }
     }
 
