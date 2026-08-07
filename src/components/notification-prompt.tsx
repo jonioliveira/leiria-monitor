@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { Bell, BellOff, X } from "lucide-react";
 
-const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!;
+// Inlined at build time. Empty when the key is not configured in the build
+// environment — see the mount effect below.
+const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
 const DISMISSED_KEY = "push-notification-dismissed";
 
 export function NotificationPrompt() {
@@ -12,6 +14,14 @@ export function NotificationPrompt() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    // Never offer the prompt when push cannot possibly work. Subscribing
+    // consumes the user's OS notification permission, and once granted it
+    // cannot be re-requested — so a failed attempt locks the user out of ever
+    // enabling alerts, while `Notification.permission === "granted"` makes the
+    // UI report success. Requires both a VAPID key and a registered service
+    // worker, since `navigator.serviceWorker.ready` never settles without one.
+    if (!VAPID_PUBLIC_KEY) return;
+
     if (
       typeof Notification === "undefined" ||
       !("serviceWorker" in navigator) ||
