@@ -8,7 +8,9 @@ export const LEIRIA_MUNICIPALITIES = [
   "Nazaré",
   "Ansião",
   "Alvaiázere",
-  "Castanheira de Pera",
+  // Spelled with the circumflex by both E-REDES (`con_name`) and the CAOP
+  // parish GeoJSON. Without it the name matches nothing in either source.
+  "Castanheira de Pêra",
   "Figueiró dos Vinhos",
   "Pedrógão Grande",
   "Ourém",
@@ -80,7 +82,7 @@ export const MUNICIPALITY_COORDS: Record<string, { lat: number; lng: number }> =
   "Nazaré": { lat: 39.6019, lng: -9.0699 },
   "Ansião": { lat: 39.9105, lng: -8.4344 },
   "Alvaiázere": { lat: 39.8265, lng: -8.3820 },
-  "Castanheira de Pera": { lat: 39.9927, lng: -8.2061 },
+  "Castanheira de Pêra": { lat: 39.9927, lng: -8.2061 },
   "Figueiró dos Vinhos": { lat: 39.9024, lng: -8.2732 },
   "Pedrógão Grande": { lat: 39.9194, lng: -8.1430 },
   "Ourém": { lat: 39.6621, lng: -8.5860 },
