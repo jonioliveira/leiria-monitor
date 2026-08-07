@@ -12,21 +12,31 @@ export function OfflineBanner() {
     setOffline(!navigator.onLine);
     setQueued(getQueuedCount());
 
+    async function drainQueue() {
+      if (getQueuedCount() === 0) return;
+      setFlushing(true);
+      await flushQueue();
+      // flushQueue leaves anything that failed to send in the queue, so read
+      // the real count back rather than assuming it drained completely.
+      setQueued(getQueuedCount());
+      setFlushing(false);
+    }
+
     async function handleOnline() {
       setOffline(false);
-      const count = getQueuedCount();
-      if (count > 0) {
-        setFlushing(true);
-        await flushQueue();
-        setQueued(0);
-        setFlushing(false);
-      }
+      await drainQueue();
     }
 
     function handleOffline() {
       setOffline(true);
       setQueued(getQueuedCount());
     }
+
+    // Reports queued in an earlier session were only ever replayed by the
+    // "online" event — which does not fire when the app is opened while
+    // already connected, stranding them in localStorage indefinitely. Drain
+    // on mount too, so a queued report survives closing and reopening the app.
+    if (navigator.onLine) void drainQueue();
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
