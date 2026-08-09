@@ -1,14 +1,13 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import {
-  eredesOutages,
   ipmaWarnings,
   procivOccurrences,
   procivWarnings,
   eredesScheduledWork,
   userReports,
 } from "@/db/schema";
-import { sql, eq, and, gte, desc } from "drizzle-orm";
+import { eq, and, gte } from "drizzle-orm";
 import { EREDES_BASE, EREDES_SUBSTATION_DATASET } from "@/lib/constants";
 import { getAllConcelhos, getParishesByConcelho } from "@/lib/parish-lookup";
 
@@ -49,9 +48,8 @@ export async function GET() {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    const [outages, warnings, occurrences, scheduledWork, populationWarnings, substationCount, electricityReports, allActiveReports] =
+    const [warnings, occurrences, scheduledWork, populationWarnings, substationCount, electricityReports, allActiveReports] =
       await Promise.all([
-        db.select().from(eredesOutages),
         db.select().from(ipmaWarnings),
         db.select().from(procivOccurrences),
         db.select().from(eredesScheduledWork),
@@ -76,14 +74,25 @@ export async function GET() {
           ),
       ]);
 
-    const totalOutages = outages.reduce((sum, o) => sum + o.outageCount, 0);
-
-    // Derive status levels
+    // Derive status levels.
+    //
+    // The `eredes_outages` table used to contribute here, but nothing has
+    // written to it since 2026-02-12: the E-REDES dataset that fed it
+    // (`outages-per-geography`) no longer exists in their catalogue, and no
+    // code path inserts into the table. Its 459 stale rows summed to well
+    // over the `> 5` threshold, so this pinned the card to "Crítico"
+    // permanently — while the number displayed beside the badge is the live
+    // report count, giving "Crítico" next to "0 Reportes".
+    //
+    // Status is now derived only from signals that actually update.
     let electricityStatus: "critical" | "warning" | "ok" | "unknown" = "unknown";
     const reportCount = electricityReports.length;
-    if (reportCount > 5 || totalOutages > 5) {
+    const substationsDegraded =
+      substationCount.total > 0 && substationCount.active < substationCount.total;
+
+    if (reportCount > 5) {
       electricityStatus = "critical";
-    } else if (reportCount > 0 || totalOutages > 0 || (substationCount.total > 0 && substationCount.active < substationCount.total)) {
+    } else if (reportCount > 0 || substationsDegraded) {
       electricityStatus = "warning";
     } else if (substationCount.total > 0) {
       electricityStatus = "ok";
