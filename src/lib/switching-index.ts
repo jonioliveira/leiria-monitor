@@ -38,6 +38,24 @@ function isBaselineMonth(month: string): boolean {
   return month >= BASELINE_FROM && month <= BASELINE_TO;
 }
 
+/**
+ * Normalises a `month` value read from the database to `YYYY-MM`.
+ *
+ * The value's runtime type depends on the driver: drizzle's node-postgres
+ * adapter overrides the DATE type parser to identity and yields the raw string
+ * `"2026-02-01"`, while the neon-http path used in production yields a `Date`.
+ *
+ * Uses local date parts rather than toISOString(): the driver builds the Date
+ * at local midnight, so in any timezone ahead of UTC toISOString() would report
+ * the previous month for the first of the month.
+ */
+export function toYearMonth(value: unknown): string {
+  if (value instanceof Date) {
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}`;
+  }
+  return String(value).slice(0, 7);
+}
+
 /** One decimal place, matching how the index is displayed. */
 function toIndex(orders: number, baseline: number): number | null {
   if (baseline <= 0) return null;

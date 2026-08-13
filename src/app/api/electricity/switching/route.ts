@@ -4,6 +4,7 @@ import { switchingOrders } from "@/db/schema";
 import {
   computeConcelhoIndexes,
   computeDistrictSeries,
+  toYearMonth,
   BASELINE_FROM,
   BASELINE_TO,
   type OrderRow,
@@ -24,7 +25,7 @@ export async function GET() {
 
     // The column is a date holding the first of the month; the API speaks YYYY-MM.
     const rows: OrderRow[] = records.map((r) => ({
-      month: String(r.month).slice(0, 7),
+      month: toYearMonth(r.month),
       concelho: r.concelho,
       orderCount: r.orderCount,
     }));
