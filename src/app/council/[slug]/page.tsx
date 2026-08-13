@@ -194,6 +194,15 @@ function ConcelhoPageInner({ slug }: { slug: string }) {
               {data.transformers.total} postos de transformação no concelho
             </p>
           )}
+          {data?.switching?.latestIndex != null && (
+            <p className="text-sm text-muted-foreground">
+              Índice de recuperação da rede:{" "}
+              <span className="font-medium text-foreground">
+                {data.switching.latestIndex}%
+              </span>{" "}
+              ({data.switching.latestMonth}) face à média pré-tempestade
+            </p>
+          )}
         </div>
         <button
           onClick={() => fetchData(true)}
