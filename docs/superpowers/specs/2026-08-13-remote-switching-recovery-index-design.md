@@ -178,6 +178,7 @@ Both substation cards gain a note recording that E-REDES data ends 2026-05-05.
 | Partial page failure during pagination | warn and continue; never silently truncate |
 | Table empty | API returns empty series; `/recovery` hides the card |
 | Concelho with zero baseline | index is `null`; chart skips the point |
+| `date` column read via a different driver | normalised by `toYearMonth()`; node-postgres yields a string, neon-http yields a `Date` |
 
 ## Verification
 

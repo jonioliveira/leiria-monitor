@@ -14,6 +14,7 @@
 - **All user-facing copy is European Portuguese.** No i18n framework; strings are inline.
 - **`tipo_de_servico` must be queried with correctly-encoded UTF-8 diacritics** — `Interrupções`, `Reduções temporárias Potência Contratada`, `Reposições Potência Contratada`. A mojibake or ASCII-folded variant matches zero rows for that type **and returns no error**, silently dropping it from the sum and yielding plausible-but-wrong totals (333 rather than 5920 for 2025-10). Note the asymmetry: E-REDES double-encodes these values in its JSON *response*, so a `group_by` listing prints the mojibake form — that is a display artifact, not the queryable value.
 - **Never use `total_count` for pagination on `group_by` queries.** E-REDES caps it at the page size — it reports `100` for a 952-group result. Paginate until a page returns fewer rows than the page size.
+- **A `date` column's runtime type depends on the driver.** `src/db/index.ts` selects `drizzle-orm/node-postgres` for local URLs and `drizzle-orm/neon-http` for Neon (production). The node-postgres session overrides the DATE type parser to identity and yields the raw string `"2026-02-01"`; neon-http has no such override and yields a `Date`. Never do `String(value).slice(0, 7)` — in production that gives `"Sun Feb"`, which silently collapses the baseline to 0 and every index to null while still returning `success: true`. Use the shared `toYearMonth()` helper from `src/lib/switching-index.ts`, which reads local date parts rather than `toISOString()` (the driver builds the Date at local midnight, so `toISOString()` reports the previous month for the first of the month in any timezone ahead of UTC — Lisbon in summer).
 - **Filter by `concelho in (...)`, never `distrito='Leiria'`.** Ourém is administratively Santarém; the district filter also pulls in Bombarral and Óbidos.
 - `LEIRIA_MUNICIPALITIES` in `src/lib/constants.ts` is the authoritative 15-municipality list and already carries the correct `Castanheira de Pêra` spelling.
 - The repository has **no test framework**. Verification uses standalone scripts run with `node --experimental-strip-types`, plus `tsc --noEmit` and a production build. Scripts live in the scratchpad and are **not** committed.
@@ -666,6 +667,7 @@ import { switchingOrders } from "@/db/schema";
 import {
   computeConcelhoIndexes,
   computeDistrictSeries,
+  toYearMonth,
   BASELINE_FROM,
   BASELINE_TO,
   type OrderRow,
@@ -684,9 +686,11 @@ export async function GET() {
       })
       .from(switchingOrders);
 
-    // The column is a date holding the first of the month; the API speaks YYYY-MM.
+    // The column is a date holding the first of the month; the API speaks
+    // YYYY-MM. toYearMonth handles both driver representations — see the
+    // global constraint on driver-dependent date types.
     const rows: OrderRow[] = records.map((r) => ({
-      month: String(r.month).slice(0, 7),
+      month: toYearMonth(r.month),
       concelho: r.concelho,
       orderCount: r.orderCount,
     }));
@@ -990,7 +994,7 @@ In `src/app/api/dashboard/area/route.ts`, add to the imports:
 
 ```ts
 import { switchingOrders } from "@/db/schema";
-import { computeConcelhoIndexes, type OrderRow } from "@/lib/switching-index";
+import { computeConcelhoIndexes, toYearMonth, type OrderRow } from "@/lib/switching-index";
 ```
 
 Then, after the transformer block and before the response is assembled:
@@ -1016,7 +1020,7 @@ if (canonical) {
       .where(eq(switchingOrders.concelho, canonical));
 
     const rows: OrderRow[] = records.map((r) => ({
-      month: String(r.month).slice(0, 7),
+      month: toYearMonth(r.month),
       concelho: r.concelho,
       orderCount: r.orderCount,
     }));
