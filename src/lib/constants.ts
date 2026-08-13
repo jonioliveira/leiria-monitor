@@ -24,6 +24,7 @@ export const EREDES_SCHEDULED_DATASET = "network-scheduling-work";
 export const EREDES_SUBSTATION_DATASET = "diagrama_carga_subestacao_08_a_10";
 export const EREDES_PTD_DATASET = "postos-transformacao-distribuicao";
 export const EREDES_POLES_DATASET = "apoios-baixa-tensao";
+export const EREDES_SWITCHING_DATASET = "15-ordens-de-servico";
 export const LEIRIA_CENTER = { lat: 39.65, lng: -8.75 };
 export const LEIRIA_RADIUS_KM = 50;
 
