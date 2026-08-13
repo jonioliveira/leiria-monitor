@@ -17,7 +17,7 @@
 - **Filter by `concelho in (...)`, never `distrito='Leiria'`.** Ourém is administratively Santarém; the district filter also pulls in Bombarral and Óbidos.
 - `LEIRIA_MUNICIPALITIES` in `src/lib/constants.ts` is the authoritative 15-municipality list and already carries the correct `Castanheira de Pêra` spelling.
 - The repository has **no test framework**. Verification uses standalone scripts run with `node --experimental-strip-types`, plus `tsc --noEmit` and a production build. Scripts live in the scratchpad and are **not** committed.
-- Build verification must use `./node_modules/.bin/next build` directly — `pnpm build` triggers a dependency precheck that fails on unapproved build scripts, unrelated to this work.
+- Build and schema commands must invoke the local binaries directly — `./node_modules/.bin/next build`, `./node_modules/.bin/drizzle-kit push`. Both `pnpm build` and `pnpm db:push` trigger a dependency precheck that fails on unapproved build scripts, unrelated to this work. `drizzle-kit push` is non-interactive here and prints `[✓] Changes applied`.
 - Commit style: conventional commits with a scope. No AI attribution.
 
 ---
@@ -494,7 +494,7 @@ export const switchingOrders = pgTable(
 ```bash
 docker compose up -d
 export DATABASE_URL="postgres://leiria:leiria@localhost:5436/leiria_monitor"
-pnpm db:push
+./node_modules/.bin/drizzle-kit push
 psql "$DATABASE_URL" -c "\d switching_orders"
 ```
 
@@ -634,7 +634,7 @@ when ingestion fails instead of reporting success regardless."
 it on deploy, so the table must be created in the production database explicitly:
 
 ```bash
-DATABASE_URL="<production Neon URL>" pnpm db:push
+DATABASE_URL="<production Neon URL>" ./node_modules/.bin/drizzle-kit push
 ```
 
 The change is purely additive (one new table plus its unique index). Confirm
