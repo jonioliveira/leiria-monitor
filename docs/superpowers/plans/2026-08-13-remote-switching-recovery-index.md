@@ -12,7 +12,7 @@
 
 - Design doc: `docs/superpowers/specs/2026-08-13-remote-switching-recovery-index-design.md`.
 - **All user-facing copy is European Portuguese.** No i18n framework; strings are inline.
-- **`tipo_de_servico` values are double-encoded UTF-8 in the source data.** The API returns `InterrupÃ§Ãµes`, not `Interrupções`. The correct spelling matches zero rows **and returns no error**. These literals must be preserved exactly.
+- **`tipo_de_servico` must be queried with correctly-encoded UTF-8 diacritics** — `Interrupções`, `Reduções temporárias Potência Contratada`, `Reposições Potência Contratada`. A mojibake or ASCII-folded variant matches zero rows for that type **and returns no error**, silently dropping it from the sum and yielding plausible-but-wrong totals (333 rather than 5920 for 2025-10). Note the asymmetry: E-REDES double-encodes these values in its JSON *response*, so a `group_by` listing prints the mojibake form — that is a display artifact, not the queryable value.
 - **Never use `total_count` for pagination on `group_by` queries.** E-REDES caps it at the page size — it reports `100` for a 952-group result. Paginate until a page returns fewer rows than the page size.
 - **Filter by `concelho in (...)`, never `distrito='Leiria'`.** Ourém is administratively Santarém; the district filter also pulls in Bombarral and Óbidos.
 - `LEIRIA_MUNICIPALITIES` in `src/lib/constants.ts` is the authoritative 15-municipality list and already carries the correct `Castanheira de Pêra` spelling.
@@ -345,15 +345,15 @@ import type { OrderRow } from "@/lib/switching-index";
  * The four remotely-commanded order types.
  *
  * These strings are double-encoded in the source data — the API genuinely
- * returns "InterrupÃ§Ãµes" rather than "Interrupções". Querying the correctly
+ * returns "Interrupções" rather than "Interrupções". Querying the correctly
  * spelled value matches zero rows AND returns no error, so the mojibake must
  * be preserved verbatim. Do not "fix" these literals.
  */
 const REMOTE_ORDER_TYPES = [
-  "InterrupÃ§Ãµes",
+  "Interrupções",
   "Restabelecimentos",
-  "ReduÃ§Ãµes temporÃ¡rias PotÃªncia Contratada",
-  "ReposiÃ§Ãµes PotÃªncia Contratada",
+  "Reduções temporárias Potência Contratada",
+  "Reposições Potência Contratada",
 ] as const;
 
 const PAGE_SIZE = 100;
@@ -452,9 +452,8 @@ Pages until a short page rather than trusting total_count, which
 E-REDES caps at the page size on group_by queries — it reports 100 for
 a 952-group result.
 
-The tipo_de_servico literals are deliberately double-encoded to match
-the source data; the correctly spelled values match zero rows and
-return no error."
+The tipo_de_servico literals use the exact UTF-8 spelling the API
+matches on; a mojibake variant matches zero rows and returns no error."
 ---
 
 ### Task 3: Table and ingestion cron

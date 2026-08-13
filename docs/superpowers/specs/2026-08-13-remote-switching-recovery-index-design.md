@@ -78,10 +78,13 @@ Owns all external access, following the existing `*-fetcher.ts` convention.
 
 Two traps it must handle, both verified against the live API:
 
-1. **`tipo_de_servico` values are double-encoded UTF-8 in source** — the API
-   returns `'InterrupÃ§Ãµes'`, not `'Interrupções'`. Querying the correct
-   spelling returns zero rows *with no error*. The four literals live in one
-   named constant with a comment explaining why they look corrupted.
+1. **`tipo_de_servico` must be queried with correct UTF-8 diacritics** —
+   `'Interrupções'`, not a mojibake or ASCII-folded variant. A wrong variant
+   matches zero rows for that type *with no error*, so it drops silently out of
+   the sum and the totals look plausible but are wrong (333 instead of 5920 for
+   2025-10). Confusingly, E-REDES double-encodes these values in its JSON
+   *response*, so listing them via `group_by` prints the mojibake form; that is a
+   response-serialisation artifact and must never be copied into a query.
 2. **`total_count` is capped at the page size on `group_by` queries** — it
    reports 100 for a 952-group result. Pagination must continue until a page
    returns fewer rows than the page size. Trusting `total_count` here would
