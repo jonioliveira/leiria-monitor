@@ -26,6 +26,7 @@ import {
   Signal,
 } from "lucide-react";
 import { parseConcelhoSlug, slugify } from "@/lib/slug-utils";
+import { formatYearMonth } from "@/lib/format";
 import type { AreaDashboardData } from "@/lib/types";
 
 const TYPE_CONFIG: Record<string, { label: string; icon: typeof Zap; color: string }> = {
@@ -40,17 +41,6 @@ const TYPE_CONFIG: Record<string, { label: string; icon: typeof Zap; color: stri
   other_garbage: { label: "Recolha de Lixo", icon: Trash2, color: "text-purple-400" },
   other: { label: "Outro Problema", icon: HelpCircle, color: "text-purple-400" },
 };
-
-const MONTHS_PT = [
-  "jan", "fev", "mar", "abr", "mai", "jun",
-  "jul", "ago", "set", "out", "nov", "dez",
-];
-
-/** "2026-02" -> "fev 26" */
-function formatYearMonth(month: string): string {
-  const [year, m] = month.split("-");
-  return `${MONTHS_PT[Number(m) - 1] ?? m} ${year.slice(2)}`;
-}
 
 function timeAgo(dateStr: string): string {
   const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);

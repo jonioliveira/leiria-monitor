@@ -11,23 +11,13 @@ import {
   YAxis,
 } from "recharts";
 import type { IndexPoint } from "@/lib/switching-index";
-
-const MONTHS_PT = [
-  "jan", "fev", "mar", "abr", "mai", "jun",
-  "jul", "ago", "set", "out", "nov", "dez",
-];
-
-/** "2026-02" -> "fev 26" */
-function formatMonth(month: string): string {
-  const [year, m] = month.split("-");
-  return `${MONTHS_PT[Number(m) - 1] ?? m} ${year.slice(2)}`;
-}
+import { formatYearMonth } from "@/lib/format";
 
 export function SwitchingIndexChart({ series }: { series: IndexPoint[] }) {
   if (series.length === 0) return null;
 
   const data = series.map((p) => ({
-    month: formatMonth(p.month),
+    month: formatYearMonth(p.month),
     index: p.index,
     orders: p.orders,
   }));
