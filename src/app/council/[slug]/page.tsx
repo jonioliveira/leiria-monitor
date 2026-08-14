@@ -41,6 +41,17 @@ const TYPE_CONFIG: Record<string, { label: string; icon: typeof Zap; color: stri
   other: { label: "Outro Problema", icon: HelpCircle, color: "text-purple-400" },
 };
 
+const MONTHS_PT = [
+  "jan", "fev", "mar", "abr", "mai", "jun",
+  "jul", "ago", "set", "out", "nov", "dez",
+];
+
+/** "2026-02" -> "fev 26" */
+function formatYearMonth(month: string): string {
+  const [year, m] = month.split("-");
+  return `${MONTHS_PT[Number(m) - 1] ?? m} ${year.slice(2)}`;
+}
+
 function timeAgo(dateStr: string): string {
   const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
   if (mins < 1) return "agora";
@@ -194,13 +205,19 @@ function ConcelhoPageInner({ slug }: { slug: string }) {
               {data.transformers.total} postos de transformação no concelho
             </p>
           )}
-          {data?.switching?.latestIndex != null && (
+          {data?.switching?.latestIndex != null && data.switching.latestMonth != null && (
             <p className="text-sm text-muted-foreground">
               Índice de recuperação da rede:{" "}
               <span className="font-medium text-foreground">
                 {data.switching.latestIndex}%
               </span>{" "}
-              ({data.switching.latestMonth}) face à média pré-tempestade
+              ({formatYearMonth(data.switching.latestMonth)}) face à média
+              pré-tempestade
+              <br />
+              <span className="text-xs">
+                Valores acima de 100% correspondem à recuperação do trabalho
+                acumulado, não a nova disrupção.
+              </span>
             </p>
           )}
         </div>
