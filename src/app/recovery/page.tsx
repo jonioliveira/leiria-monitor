@@ -15,6 +15,7 @@ import {
 import { OutageChart } from "@/components/outage-chart";
 import { SubstationLoadChart } from "@/components/substation-load-chart";
 import { SwitchingIndexChart } from "@/components/switching-index-chart";
+import { formatYearMonth } from "@/lib/format";
 import {
   Zap,
   Signal,
@@ -424,8 +425,8 @@ export default function RecoveryPage() {
                 <SwitchingIndexChart series={switchingSeries} />
                 <p className="mt-2 text-xs text-muted-foreground">
                   Ordens de serviço executadas remotamente pela E-REDES nos 15 concelhos do
-                  distrito, em percentagem da média pré-tempestade ({switchingData.baselineWindow.from} a{" "}
-                  {switchingData.baselineWindow.to}). Valores acima de 100% correspondem à
+                  distrito, em percentagem da média pré-tempestade ({formatYearMonth(switchingData.baselineWindow.from)} a{" "}
+                  {formatYearMonth(switchingData.baselineWindow.to)}). Valores acima de 100% correspondem à
                   recuperação do trabalho acumulado, não a nova disrupção.
                 </p>
               </CardContent>
