@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/table";
 import { OutageChart } from "@/components/outage-chart";
 import { SubstationLoadChart } from "@/components/substation-load-chart";
+import { SwitchingIndexChart } from "@/components/switching-index-chart";
+import { formatYearMonth } from "@/lib/format";
 import {
   Zap,
   Signal,
@@ -186,6 +188,10 @@ export default function RecoveryPage() {
   const [reportsData, setReportsData] = useState<ReportsData | null>(null);
   const [subData, setSubData] = useState<SubstationData | null>(null);
   const [telecomData, setTelecomData] = useState<TelecomData | null>(null);
+  const [switchingData, setSwitchingData] = useState<{
+    baselineWindow: { from: string; to: string };
+    district: { baseline: number; series: { month: string; orders: number; index: number | null }[] };
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("electricity");
   const [concelhoFilter, setConcelhoFilter] = useState("");
@@ -196,13 +202,27 @@ export default function RecoveryPage() {
       fetch("/api/reports").then((r) => r.json()),
       fetch("/api/electricity/substations").then((r) => r.json()),
       fetch("/api/telecom").then((r) => r.json()),
-    ]).then(([reportsResult, subResult, telecomResult]) => {
+      fetch("/api/electricity/switching").then((r) => r.json()),
+    ]).then(([reportsResult, subResult, telecomResult, switchingResult]) => {
       if (reportsResult.status === "fulfilled") setReportsData(reportsResult.value);
       if (subResult.status === "fulfilled") setSubData(subResult.value);
       if (telecomResult.status === "fulfilled") setTelecomData(telecomResult.value);
+      if (switchingResult.status === "fulfilled" && switchingResult.value?.success) {
+        setSwitchingData(switchingResult.value);
+      }
       setLoading(false);
     });
   }, []);
+
+  // E-REDES returns the dataset's full history (back to 2020), not just the
+  // storm period — the pre-baseline years would otherwise swamp the chart and
+  // hide the Feb–Jun 2026 recovery curve. Window to the baseline onward.
+  const switchingSeries = useMemo(() => {
+    if (!switchingData) return [];
+    return switchingData.district.series.filter(
+      (p) => p.month >= switchingData.baselineWindow.from
+    );
+  }, [switchingData]);
 
   const leiriaDistrict = useMemo(
     () => telecomData?.meo_availability?.leiria_district ?? [],
@@ -395,6 +415,24 @@ export default function RecoveryPage() {
       {/* ── Electricity tab ── */}
       {tab === "electricity" && (
         <div className="space-y-6">
+          {/* Remote switching recovery index */}
+          {switchingData && switchingSeries.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Índice de Recuperação da Rede</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <SwitchingIndexChart series={switchingSeries} />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Ordens de serviço executadas remotamente pela E-REDES nos 15 concelhos do
+                  distrito, em percentagem da média pré-tempestade ({formatYearMonth(switchingData.baselineWindow.from)} a{" "}
+                  {formatYearMonth(switchingData.baselineWindow.to)}). Valores acima de 100% correspondem à
+                  recuperação do trabalho acumulado, não a nova disrupção.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Reports by municipality chart */}
           <Card>
             <CardHeader>
@@ -422,6 +460,7 @@ export default function RecoveryPage() {
                 <p className="mt-2 text-xs text-muted-foreground">
                   Carga total agregada de {subData.substations.length} subestações no distrito de Leiria.
                   Baseline calculado a partir da semana anterior à tempestade (20–25 Jan).
+                  {" "}Dados E-REDES disponíveis até 05/05/2026.
                 </p>
               </CardContent>
             </Card>
@@ -460,6 +499,7 @@ export default function RecoveryPage() {
                       Baseline: {subData.perSubstation[selectedSubstation].baseline.toFixed(2)} MW
                       (média pré-tempestade 20–25 Jan).
                       Última carga: {subData.substations.find((s) => s.name === selectedSubstation)?.latestLoad?.toFixed(2) ?? "—"} MW.
+                      {" "}Dados E-REDES disponíveis até 05/05/2026.
                     </p>
                   </>
                 ) : selectedSubstation ? (

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { userReports, telecomCache } from "@/db/schema";
+import { userReports, telecomCache, switchingOrders } from "@/db/schema";
 import { eq, and, gte, inArray, desc } from "drizzle-orm";
 import { getParishesByConcelho } from "@/lib/parish-lookup";
 import {
@@ -8,6 +8,7 @@ import {
   EREDES_PTD_DATASET,
   MUNICIPALITY_COORDS,
 } from "@/lib/constants";
+import { computeConcelhoIndexes, toYearMonth, type OrderRow } from "@/lib/switching-index";
 
 export const revalidate = 60;
 
@@ -127,6 +128,44 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Per-concelho recovery index. Uses the canonical municipality spelling so a
+    // mis-cased query param cannot silently match zero rows.
+    let switching: {
+      latestIndex: number | null;
+      latestMonth: string | null;
+      baseline: number;
+    } | null = null;
+
+    if (canonical) {
+      try {
+        const records = await db
+          .select({
+            month: switchingOrders.month,
+            concelho: switchingOrders.concelho,
+            orderCount: switchingOrders.orderCount,
+          })
+          .from(switchingOrders)
+          .where(eq(switchingOrders.concelho, canonical));
+
+        const rows: OrderRow[] = records.map((r) => ({
+          month: toYearMonth(r.month),
+          concelho: r.concelho,
+          orderCount: r.orderCount,
+        }));
+
+        const computed = computeConcelhoIndexes(rows)[0];
+        if (computed) {
+          switching = {
+            latestIndex: computed.latestIndex,
+            latestMonth: computed.latestMonth,
+            baseline: computed.baseline,
+          };
+        }
+      } catch (error) {
+        console.warn(`[dashboard/area] switching index failed for '${canonical}':`, error);
+      }
+    }
+
     // Telecom coverage from cache — match by concelho name (case-insensitive)
     let telecom: {
       meo: { rede_fixa_pct: number | null; rede_movel_pct: number | null; rede_fixa_previsao: string; rede_movel_previsao: string } | null;
@@ -172,6 +211,7 @@ export async function GET(request: NextRequest) {
       transformers: parish ? null : transformers,
       parishes: allParishes,
       telecom,
+      switching,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";

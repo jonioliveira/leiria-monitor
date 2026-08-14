@@ -300,6 +300,11 @@ export interface AreaDashboardData {
     nos: { rede_fixa_pct: number | null; rede_movel_pct: number | null } | null;
     vodafone: { rede_fixa_pct: number | null; rede_movel_pct: number | null; rede_fixa_previsao: string; rede_movel_previsao: string } | null;
   } | null;
+  switching: {
+    latestIndex: number | null;
+    latestMonth: string | null;
+    baseline: number;
+  } | null;
 }
 
 export interface CalamityInfo {

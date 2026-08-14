@@ -26,6 +26,7 @@ import {
   Signal,
 } from "lucide-react";
 import { parseConcelhoSlug, slugify } from "@/lib/slug-utils";
+import { formatYearMonth } from "@/lib/format";
 import type { AreaDashboardData } from "@/lib/types";
 
 const TYPE_CONFIG: Record<string, { label: string; icon: typeof Zap; color: string }> = {
@@ -192,6 +193,21 @@ function ConcelhoPageInner({ slug }: { slug: string }) {
           {data?.transformers && data.transformers.total > 0 && (
             <p className="mt-1 text-xs text-muted-foreground">
               {data.transformers.total} postos de transformação no concelho
+            </p>
+          )}
+          {data?.switching?.latestIndex != null && data.switching.latestMonth != null && (
+            <p className="text-sm text-muted-foreground">
+              Índice de recuperação da rede:{" "}
+              <span className="font-medium text-foreground">
+                {data.switching.latestIndex}%
+              </span>{" "}
+              ({formatYearMonth(data.switching.latestMonth)}) face à média
+              pré-tempestade
+              <br />
+              <span className="text-xs">
+                Valores acima de 100% correspondem à recuperação do trabalho
+                acumulado, não a nova disrupção.
+              </span>
             </p>
           )}
         </div>
